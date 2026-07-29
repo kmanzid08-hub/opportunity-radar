@@ -194,6 +194,25 @@ class RwandaSourceDiscovery:
             }
         )
 
+
+    @staticmethod
+    def _clean_text(value: object) -> str:
+        if value is None:
+            return ""
+
+        return " ".join(
+            str(value).replace("\xa0", " ").split()
+        )
+
+
+    def _wait(self) -> None:
+        delay = float(
+            getattr(self, "REQUEST_DELAY_SECONDS", 1.0)
+        )
+
+        if delay > 0:
+            time.sleep(delay)
+
     def run(self) -> dict[str, int]:
         """
         Run all configured discovery queries.
