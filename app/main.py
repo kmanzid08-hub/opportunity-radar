@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import os
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated
@@ -33,11 +34,21 @@ BASE_DIR = Path(__file__).resolve().parent
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    scheduler.start()
+    # Keep the internal scheduler for local use, but disable it on Render.
+    # GitHub Actions runs the production schedules reliably while the free
+    # Render web service may be asleep.
+    scheduler_enabled = os.getenv(
+        "ENABLE_INTERNAL_SCHEDULER", "true"
+    ).strip().lower() in {"1", "true", "yes", "on"}
+
+    if scheduler_enabled:
+        scheduler.start()
+
     try:
         yield
     finally:
-        scheduler.stop()
+        if scheduler_enabled:
+            scheduler.stop()
 
 
 app = FastAPI(

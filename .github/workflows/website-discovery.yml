@@ -1,0 +1,38 @@
+name: Website discovery
+
+on:
+  # This workflow checks every day. The Python job uses the shared database
+  # to run the actual discovery only when five full days have elapsed.
+  schedule:
+    - cron: "20 4 * * *"
+      timezone: "Africa/Kigali"
+  workflow_dispatch:
+
+concurrency:
+  group: opportunity-radar-website-discovery
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+      ENABLE_INTERNAL_SCHEDULER: "false"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Discover new websites when due
+        run: python -m app.scheduled_discovery

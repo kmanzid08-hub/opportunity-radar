@@ -1,0 +1,36 @@
+name: Daily tender scan
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+      timezone: "Africa/Kigali"
+  workflow_dispatch:
+
+concurrency:
+  group: opportunity-radar-tender-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+      ENABLE_INTERNAL_SCHEDULER: "false"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tender scanner
+        run: python -m app.scanner
