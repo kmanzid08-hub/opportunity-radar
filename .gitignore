@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.db
+*.sqlite*
+.pytest_cache/
+.mypy_cache/
+.vscode/
+.idea/
+automation.log
+automation_state.json
+automation_scheduler.lock
+.DS_Store
