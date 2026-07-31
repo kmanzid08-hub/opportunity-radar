@@ -12,7 +12,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
@@ -195,6 +195,18 @@ class Opportunity(Base):
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
+    )
+
+    lead = relationship(
+        "Lead",
+        back_populates="opportunity",
+        uselist=False,
+    )
+
+    proposal = relationship(
+        "Proposal",
+        back_populates="opportunity",
+        uselist=False,
     )
 
 
