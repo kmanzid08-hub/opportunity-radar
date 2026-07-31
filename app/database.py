@@ -1,19 +1,14 @@
 from __future__ import annotations
 
-import os
 from collections.abc import Generator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from app.core.config import get_settings
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./opportunities.db")
 
-# Render and some other providers may still supply the old postgres:// prefix.
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
-elif DATABASE_URL.startswith("postgresql://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+DATABASE_URL = get_settings().database_url
 
 
 class Base(DeclarativeBase):

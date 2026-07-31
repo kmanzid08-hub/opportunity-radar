@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-import os
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Annotated
@@ -18,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_, select
 
+from app.core.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import (
     LEAD_PRIORITIES,
@@ -37,9 +37,9 @@ async def lifespan(_app: FastAPI):
     # Keep the internal scheduler for local use, but disable it on Render.
     # GitHub Actions runs the production schedules reliably while the free
     # Render web service may be asleep.
-    scheduler_enabled = os.getenv(
-        "ENABLE_INTERNAL_SCHEDULER", "true"
-    ).strip().lower() in {"1", "true", "yes", "on"}
+    scheduler_enabled = (
+        get_settings().enable_internal_scheduler
+    )
 
     if scheduler_enabled:
         scheduler.start()
