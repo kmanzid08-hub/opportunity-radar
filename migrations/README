@@ -1,0 +1,30 @@
+Opportunity Radar migrations
+============================
+
+Alembic reads DATABASE_URL through app.core.config.load_settings(). The URL is
+not stored in alembic.ini. ENABLE_INTERNAL_SCHEDULER must also contain a valid
+typed-settings value; use false for migration commands.
+
+Use only an explicit disposable database during migration development. For
+example, in PowerShell:
+
+    $env:DATABASE_URL = "sqlite+pysqlite:///C:/temp/radar-migration-test.db"
+    $env:ENABLE_INTERNAL_SCHEDULER = "false"
+    .\venv\Scripts\python.exe -m alembic upgrade head
+    .\venv\Scripts\python.exe -m alembic current
+    .\venv\Scripts\python.exe -m alembic downgrade base
+
+Do not omit DATABASE_URL when running Alembic: the application default points
+to the real local opportunities.db file. Never stamp or migrate production
+until an approved schema-only snapshot has been reviewed and reconciled with
+this fresh-database baseline.
+
+migrations/env.py imports app.models, app.lead_models, and
+app.proposal_models so Base.metadata contains opportunities, sources, leads,
+and proposals. It deliberately does not import app.main, start FastAPI, run a
+scheduler, or execute scanners.
+
+The initial baseline is validated only for a fresh database. The existing
+Base.metadata.create_all() calls, SQLite runtime schema repair, manual
+migration scripts, and scheduler-state table creation remain active for now.
+They must be removed or replaced only after deployed-schema review.
