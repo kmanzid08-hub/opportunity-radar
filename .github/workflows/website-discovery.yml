@@ -1,10 +1,10 @@
 name: Website discovery
 
 on:
-  # This workflow checks every day. The Python job uses the shared database
-  # to run the actual discovery only when five full days have elapsed.
+  # Run website discovery every five days. The Python job also uses the
+  # shared database to prevent an early duplicate execution.
   schedule:
-    - cron: "20 4 * * *"
+    - cron: "20 4 */5 * *"
       timezone: "Africa/Kigali"
   workflow_dispatch:
 
