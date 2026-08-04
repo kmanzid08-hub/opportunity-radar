@@ -8,6 +8,7 @@ from functools import lru_cache
 
 DEFAULT_DATABASE_URL = "sqlite:///./opportunities.db"
 DEFAULT_ENABLE_INTERNAL_SCHEDULER = True
+DEFAULT_INBOX_NO_DEADLINE_MAX_AGE_DAYS = 45
 
 TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 FALSE_VALUES = frozenset({"0", "false", "no", "off"})
@@ -21,6 +22,7 @@ class SettingsError(ValueError):
 class Settings:
     database_url: str
     enable_internal_scheduler: bool
+    inbox_no_deadline_max_age_days: int
 
 
 def _normalise_database_url(value: str) -> str:
@@ -59,6 +61,28 @@ def _parse_boolean(value: str, *, setting_name: str) -> bool:
     )
 
 
+def _parse_positive_integer(
+    value: str,
+    *,
+    setting_name: str,
+) -> int:
+    try:
+        parsed = int(value.strip())
+    except ValueError as exc:
+        raise SettingsError(
+            f"{setting_name} must be a positive integer; "
+            f"received {value!r}."
+        ) from exc
+
+    if parsed < 1:
+        raise SettingsError(
+            f"{setting_name} must be a positive integer; "
+            f"received {value!r}."
+        )
+
+    return parsed
+
+
 def load_settings(
     environ: Mapping[str, str] | None = None,
 ) -> Settings:
@@ -73,6 +97,10 @@ def load_settings(
         "ENABLE_INTERNAL_SCHEDULER",
         str(DEFAULT_ENABLE_INTERNAL_SCHEDULER),
     )
+    no_deadline_max_age_value = source.get(
+        "INBOX_NO_DEADLINE_MAX_AGE_DAYS",
+        str(DEFAULT_INBOX_NO_DEADLINE_MAX_AGE_DAYS),
+    )
 
     return Settings(
         database_url=_normalise_database_url(
@@ -81,6 +109,14 @@ def load_settings(
         enable_internal_scheduler=_parse_boolean(
             scheduler_value,
             setting_name="ENABLE_INTERNAL_SCHEDULER",
+        ),
+        inbox_no_deadline_max_age_days=(
+            _parse_positive_integer(
+                no_deadline_max_age_value,
+                setting_name=(
+                    "INBOX_NO_DEADLINE_MAX_AGE_DAYS"
+                ),
+            )
         ),
     )
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated
 
@@ -15,7 +15,8 @@ from fastapi import (
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import get_settings
 from app.database import Base, SessionLocal, engine
@@ -72,7 +73,79 @@ templates = Jinja2Templates(
 )
 
 
-def get_status_counts() -> dict[str, int]:
+def current_utc_time() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def opportunity_archive_condition(
+    now: datetime,
+) -> ColumnElement[bool]:
+    """Return the rule for records hidden from the opportunity inbox."""
+    settings = get_settings()
+    today = now.date()
+    stale_before = now - timedelta(
+        days=settings.inbox_no_deadline_max_age_days
+    )
+    last_activity = func.coalesce(
+        Opportunity.last_seen_at,
+        Opportunity.first_discovered_at,
+        Opportunity.created_at,
+    )
+
+    return and_(
+        Opportunity.is_lead.is_(False),
+        or_(
+            Opportunity.is_expired.is_(True),
+            and_(
+                Opportunity.deadline.is_not(None),
+                Opportunity.deadline < today,
+            ),
+            and_(
+                Opportunity.deadline.is_(None),
+                last_activity.is_not(None),
+                last_activity < stale_before,
+            ),
+        ),
+    )
+
+
+def opportunity_inbox_condition(
+    now: datetime,
+) -> ColumnElement[bool]:
+    """Return records that remain actionable in the opportunity inbox."""
+    settings = get_settings()
+    today = now.date()
+    stale_before = now - timedelta(
+        days=settings.inbox_no_deadline_max_age_days
+    )
+    last_activity = func.coalesce(
+        Opportunity.last_seen_at,
+        Opportunity.first_discovered_at,
+        Opportunity.created_at,
+    )
+
+    return or_(
+        Opportunity.is_lead.is_(True),
+        and_(
+            Opportunity.is_lead.is_(False),
+            Opportunity.is_expired.is_(False),
+            or_(
+                Opportunity.deadline >= today,
+                and_(
+                    Opportunity.deadline.is_(None),
+                    or_(
+                        last_activity.is_(None),
+                        last_activity >= stale_before,
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def get_status_counts(
+    inbox_condition: ColumnElement[bool],
+) -> dict[str, int]:
     """
     Return opportunity counts for each workflow status.
     """
@@ -86,7 +159,9 @@ def get_status_counts() -> dict[str, int]:
             select(
                 Opportunity.status,
                 func.count(Opportunity.id),
-            ).group_by(Opportunity.status)
+            )
+            .where(inbox_condition)
+            .group_by(Opportunity.status)
         ).all()
 
     for status, count in results:
@@ -96,13 +171,16 @@ def get_status_counts() -> dict[str, int]:
     return counts
 
 
-def get_categories() -> list[str]:
+def get_categories(
+    inbox_condition: ColumnElement[bool],
+) -> list[str]:
     """
     Return all opportunity categories currently in the database.
     """
     with SessionLocal() as db:
         categories = db.scalars(
             select(Opportunity.category)
+            .where(inbox_condition)
             .distinct()
             .order_by(Opportunity.category)
         ).all()
@@ -128,9 +206,35 @@ def home(
     """
     Display the dashboard with search and filtering.
     """
-    today = date.today()
+    now = current_utc_time()
+    today = now.date()
+    inbox_condition = opportunity_inbox_condition(
+        now
+    )
+    archive_condition = opportunity_archive_condition(
+        now
+    )
 
     statement = select(Opportunity)
+
+    if deadline_filter == "archived":
+        statement = statement.where(
+            archive_condition
+        )
+    elif deadline_filter == "expired":
+        statement = statement.where(
+            or_(
+                Opportunity.is_expired.is_(True),
+                and_(
+                    Opportunity.deadline.is_not(None),
+                    Opportunity.deadline < today,
+                ),
+            )
+        )
+    else:
+        statement = statement.where(
+            inbox_condition
+        )
 
     if q:
         search_term = f"%{q.strip()}%"
@@ -164,15 +268,11 @@ def home(
 
     if deadline_filter == "open":
         statement = statement.where(
+            Opportunity.is_expired.is_(False),
             or_(
                 Opportunity.deadline >= today,
                 Opportunity.deadline.is_(None),
             )
-        )
-
-    elif deadline_filter == "expired":
-        statement = statement.where(
-            Opportunity.is_expired.is_(True)
         )
 
     elif deadline_filter == "no_deadline":
@@ -219,10 +319,12 @@ def home(
         total_opportunities = db.scalar(
             select(
                 func.count(Opportunity.id)
-            )
+            ).where(inbox_condition)
         ) or 0
 
-    status_counts = get_status_counts()
+    status_counts = get_status_counts(
+        inbox_condition
+    )
 
     return templates.TemplateResponse(
         request=request,
@@ -235,7 +337,9 @@ def home(
             "total_opportunities": (
                 total_opportunities
             ),
-            "categories": get_categories(),
+            "categories": get_categories(
+                inbox_condition
+            ),
             "statuses": (
                 OPPORTUNITY_STATUSES
             ),
@@ -248,6 +352,10 @@ def home(
             "selected_status": status or "",
             "selected_deadline": (
                 deadline_filter or ""
+            ),
+            "inbox_no_deadline_max_age_days": (
+                get_settings()
+                .inbox_no_deadline_max_age_days
             ),
         },
     )

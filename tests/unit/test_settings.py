@@ -21,6 +21,7 @@ def test_default_settings_preserve_current_behavior() -> None:
 
     assert settings.database_url == "sqlite:///./opportunities.db"
     assert settings.enable_internal_scheduler is True
+    assert settings.inbox_no_deadline_max_age_days == 45
 
 
 @pytest.mark.parametrize(
@@ -91,6 +92,38 @@ def test_invalid_scheduler_value_fails_clearly() -> None:
     ):
         load_settings(
             {"ENABLE_INTERNAL_SCHEDULER": "sometimes"}
+        )
+
+
+def test_inbox_no_deadline_age_is_configurable() -> None:
+    settings = load_settings(
+        {
+            "ENABLE_INTERNAL_SCHEDULER": "false",
+            "INBOX_NO_DEADLINE_MAX_AGE_DAYS": "60",
+        }
+    )
+
+    assert settings.inbox_no_deadline_max_age_days == 60
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["0", "-1", "not-a-number", ""],
+)
+def test_invalid_inbox_no_deadline_age_fails_clearly(
+    value: str,
+) -> None:
+    with pytest.raises(
+        SettingsError,
+        match=(
+            "INBOX_NO_DEADLINE_MAX_AGE_DAYS must be a positive integer"
+        ),
+    ):
+        load_settings(
+            {
+                "ENABLE_INTERNAL_SCHEDULER": "false",
+                "INBOX_NO_DEADLINE_MAX_AGE_DAYS": value,
+            }
         )
 
 

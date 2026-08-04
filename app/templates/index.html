@@ -69,7 +69,7 @@
                 class="summary-card"
             >
                 <span class="summary-label">
-                    All Opportunities
+                    Inbox Opportunities
                 </span>
 
                 <strong>
@@ -262,7 +262,16 @@
                                 selected
                             {% endif %}
                         >
-                            Deadline not identified
+                            Deadline not identified (active)
+                        </option>
+
+                        <option
+                            value="archived"
+                            {% if selected_deadline == "archived" %}
+                                selected
+                            {% endif %}
+                        >
+                            Archived opportunities
                         </option>
 
                         <option
@@ -299,9 +308,20 @@
                 <h2>Opportunities</h2>
 
                 <p>
-                    Showing {{ filtered_count }}
-                    of {{ total_opportunities }}
-                    opportunities
+                    {% if selected_deadline == "archived" %}
+                        Showing {{ filtered_count }} archived
+                        opportunities
+                    {% else %}
+                        Showing {{ filtered_count }}
+                        of {{ total_opportunities }} inbox
+                        opportunities
+                    {% endif %}
+                </p>
+
+                <p class="muted-text">
+                    Opportunities without a deadline leave the inbox after
+                    {{ inbox_no_deadline_max_age_days }} days unless refreshed.
+                    Pipeline opportunities are always retained.
                 </p>
             </div>
         </section>
