@@ -4,8 +4,10 @@ from datetime import date, datetime, timezone
 
 from sqlalchemy import inspect, select, text
 
+import app.lead_models  # noqa: F401
+import app.proposal_models  # noqa: F401
 from app.database import Base, SessionLocal, engine
-from app.filters import classify_opportunity
+from app.filters import classify_opportunity_with_reason
 from app.models import Opportunity, Source
 from app.schemas import FilteredOpportunity
 from app.scanners.base import BaseScanner
@@ -356,166 +358,160 @@ def get_scanner_name(
 
 
 def run_scanner() -> None:
-    ensure_sqlite_schema()
-
-    approved_count = approve_existing_sources()
-    expired_count = mark_expired_opportunities()
-    scanners = get_scanners()
-
     total_found = 0
-    total_relevant = 0
+    total_accepted = 0
+    total_rejected = 0
+    total_duplicates = 0
     total_saved = 0
-    total_updated_or_existing = 0
-    total_scan_failures = 0
-    total_classification_failures = 0
-    total_save_failures = 0
+    total_errors = 0
 
     print("=" * 60)
     print("Opportunity Radar")
     print("=" * 60)
 
-    if approved_count:
-        print(
-            f"Automatically approved "
-            f"{approved_count} active website sources."
-        )
+    try:
+        ensure_sqlite_schema()
 
-    if expired_count:
-        print(
-            f"Marked {expired_count} stored "
-            "opportunities as expired."
-        )
+        approved_count = approve_existing_sources()
+        expired_count = mark_expired_opportunities()
+        scanners = get_scanners()
 
-    for source_scanner in scanners:
-        scanner_name = get_scanner_name(
-            source_scanner
-        )
-
-        print(f"\nScanning {scanner_name}...")
-
-        try:
-            raw_opportunities = source_scanner.scan()
-        except Exception as exc:
-            total_scan_failures += 1
-
+        if approved_count:
             print(
-                f"Scan failed for {scanner_name}: "
-                f"{type(exc).__name__}: {exc}"
+                f"Automatically approved "
+                f"{approved_count} active website sources."
             )
-            continue
 
-        source_total = len(raw_opportunities)
-        source_relevant = 0
-        source_saved = 0
+        if expired_count:
+            print(
+                f"Marked {expired_count} stored "
+                "opportunities as expired."
+            )
 
-        total_found += source_total
+        for source_scanner in scanners:
+            scanner_name = get_scanner_name(
+                source_scanner
+            )
 
-        print(f"Found {source_total} possible listings")
+            print(f"\nScanning {scanner_name}...")
 
-        for raw_opportunity in raw_opportunities:
             try:
-                filtered = classify_opportunity(
+                raw_opportunities = source_scanner.scan()
+            except Exception as exc:
+                total_errors += 1
+
+                print(
+                    f"Scan failed for {scanner_name}: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                continue
+
+            source_total = len(raw_opportunities)
+            source_accepted = 0
+            source_rejected = 0
+            source_duplicates = 0
+            source_saved = 0
+            source_errors = 0
+
+            total_found += source_total
+
+            print(f"Found {source_total} possible listings")
+
+            for raw_opportunity in raw_opportunities:
+                decision = classify_opportunity_with_reason(
                     raw_opportunity
                 )
-            except Exception as exc:
-                total_classification_failures += 1
+                filtered = decision.opportunity
+
+                if filtered is None:
+                    total_rejected += 1
+                    source_rejected += 1
+
+                    print(
+                        "  [REJECTED] "
+                        f"{raw_opportunity.title[:90]}"
+                    )
+                    print(
+                        "      Reason: "
+                        f"{decision.rejection_reason}"
+                    )
+                    continue
+
+                total_accepted += 1
+                source_accepted += 1
+
+                try:
+                    was_saved = save_opportunity(filtered)
+                except Exception as exc:
+                    total_errors += 1
+                    source_errors += 1
+
+                    print(
+                        "  Save failed for: "
+                        f"{filtered.title[:80]}"
+                    )
+                    print(
+                        f"    {type(exc).__name__}: {exc}"
+                    )
+                    continue
+
+                if was_saved:
+                    total_saved += 1
+                    source_saved += 1
+                    record_status = "NEW"
+                else:
+                    total_duplicates += 1
+                    source_duplicates += 1
+                    record_status = "DUPLICATE"
+
+                organisation = (
+                    clean_organisation_name(
+                        filtered.organisation_name
+                    )
+                    or "Organisation not specified"
+                )
 
                 print(
-                    "  Classification failed for: "
-                    f"{raw_opportunity.title[:80]}"
+                    f"  [{record_status}] "
+                    f"[{filtered.category}] "
+                    f"{filtered.title[:90]}"
                 )
                 print(
-                    f"    {type(exc).__name__}: {exc}"
-                )
-                continue
-
-            if filtered is None:
-                continue
-
-            total_relevant += 1
-            source_relevant += 1
-
-            try:
-                was_saved = save_opportunity(filtered)
-            except Exception as exc:
-                total_save_failures += 1
-
-                print(
-                    "  Save failed for: "
-                    f"{filtered.title[:80]}"
+                    f"      Organisation: "
+                    f"{organisation[:100]}"
                 )
                 print(
-                    f"    {type(exc).__name__}: {exc}"
+                    f"      Match score: "
+                    f"{filtered.match_score}"
                 )
-                continue
 
-            if was_saved:
-                total_saved += 1
-                source_saved += 1
-                record_status = "NEW"
-            else:
-                total_updated_or_existing += 1
-                record_status = "EXISTING"
+            print(f"\n{scanner_name} summary:")
+            print(f"  Raw opportunities found: {source_total}")
+            print(f"  Accepted: {source_accepted}")
+            print(f"  Rejected: {source_rejected}")
+            print(f"  Duplicates: {source_duplicates}")
+            print(f"  Saved: {source_saved}")
+            print(f"  Errors: {source_errors}")
+    except Exception:
+        total_errors += 1
+        raise
+    finally:
+        print("\n" + "=" * 60)
+        print("Overall summary")
+        print("=" * 60)
+        print(f"Raw opportunities found: {total_found}")
+        print(f"Accepted: {total_accepted}")
+        print(f"Rejected: {total_rejected}")
+        print(f"Duplicates: {total_duplicates}")
+        print(f"Saved: {total_saved}")
+        print(f"Errors: {total_errors}")
+        print("=" * 60)
 
-            organisation = (
-                clean_organisation_name(
-                    filtered.organisation_name
-                )
-                or "Organisation not specified"
-            )
-
-            print(
-                f"  [{record_status}] "
-                f"[{filtered.category}] "
-                f"{filtered.title[:90]}"
-            )
-            print(
-                f"      Organisation: "
-                f"{organisation[:100]}"
-            )
-            print(
-                f"      Match score: "
-                f"{filtered.match_score}"
-            )
-
-        print(f"\n{scanner_name} summary:")
-        print(f"  Possible listings: {source_total}")
-        print(f"  Relevant listings: {source_relevant}")
-        print(f"  New listings saved: {source_saved}")
-
-    print("\n" + "=" * 60)
-    print("Overall summary")
-    print("=" * 60)
-    print(
-        f"Possible listings found:       "
-        f"{total_found}"
-    )
-    print(
-        f"Relevant opportunities:        "
-        f"{total_relevant}"
-    )
-    print(
-        f"New opportunities saved:       "
-        f"{total_saved}"
-    )
-    print(
-        f"Existing or updated records:   "
-        f"{total_updated_or_existing}"
-    )
-    print(
-        f"Scanner failures:              "
-        f"{total_scan_failures}"
-    )
-    print(
-        f"Classification failures:       "
-        f"{total_classification_failures}"
-    )
-    print(
-        f"Database save failures:        "
-        f"{total_save_failures}"
-    )
-    print("Finished.")
-    print("=" * 60)
+    if total_errors:
+        raise RuntimeError(
+            "Opportunity scan completed with "
+            f"{total_errors} error(s)."
+        )
 
 
 def main() -> None:

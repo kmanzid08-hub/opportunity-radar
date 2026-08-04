@@ -14,6 +14,12 @@ class CategoryRule:
     broad_terms: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class ClassificationDecision:
+    opportunity: FilteredOpportunity | None
+    rejection_reason: str | None = None
+
+
 CATEGORY_RULES: tuple[CategoryRule, ...] = (
     CategoryRule(
         category="Audit",
@@ -451,14 +457,23 @@ def is_procurement_document(opportunity: RawOpportunity) -> bool:
     return bool(find_matches(document_text, DOCUMENT_PROCUREMENT_HINTS))
 
 
-def classify_opportunity(
+def classify_opportunity_with_reason(
     opportunity: RawOpportunity,
-) -> FilteredOpportunity | None:
+) -> ClassificationDecision:
     text = build_searchable_text(opportunity)
     title = normalise_text(getattr(opportunity, "title", ""))
 
-    if not text or not title:
-        return None
+    if not title:
+        return ClassificationDecision(
+            opportunity=None,
+            rejection_reason="title is missing or empty",
+        )
+
+    if not text:
+        return ClassificationDecision(
+            opportunity=None,
+            rejection_reason="no searchable opportunity content",
+        )
 
     strong_procurement = find_matches(text, STRONG_PROCUREMENT_TERMS)
     abbreviations = find_matches(text, PROCUREMENT_ABBREVIATIONS)
@@ -487,7 +502,10 @@ def classify_opportunity(
     )
 
     if not has_procurement_evidence:
-        return None
+        return ClassificationDecision(
+            opportunity=None,
+            rejection_reason="no procurement evidence was detected",
+        )
 
     # Reject ordinary employment vacancies unless the text also clearly
     # requests a professional firm/service provider through procurement.
@@ -497,14 +515,25 @@ def classify_opportunity(
         or document_evidence
         or firm_matches
     ):
-        return None
+        return ClassificationDecision(
+            opportunity=None,
+            rejection_reason=(
+                "employment listing without evidence that firms or "
+                "service providers are being invited"
+            ),
+        )
 
     title_is_generic = any(title == normalise_text(item) for item in GENERIC_TITLES)
     if title_is_generic and not (
         len(strong_procurement) >= 1
         and (deadline_present or metadata or submission_actions)
     ):
-        return None
+        return ClassificationDecision(
+            opportunity=None,
+            rejection_reason=(
+                "generic page title without enough procurement evidence"
+            ),
+        )
 
     category_scores: dict[str, int] = {}
     category_reasons: dict[str, list[str]] = {}
@@ -552,20 +581,49 @@ def classify_opportunity(
         category_reasons[rule.category] = reasons
 
     if not category_scores:
-        return None
+        return ClassificationDecision(
+            opportunity=None,
+            rejection_reason=(
+                "no supported professional-service category matched"
+            ),
+        )
 
     best_category = max(category_scores, key=category_scores.get)
     best_score = category_scores[best_category]
 
     if best_score < MINIMUM_ACCEPTANCE_SCORE:
-        return None
+        return ClassificationDecision(
+            opportunity=None,
+            rejection_reason=(
+                f"best category {best_category!r} scored {best_score}, "
+                f"below the acceptance threshold of "
+                f"{MINIMUM_ACCEPTANCE_SCORE}"
+            ),
+        )
 
-    return FilteredOpportunity(
-        raw=opportunity,
-        category=best_category,
-        match_score=best_score,
-        match_reason=", ".join(category_reasons[best_category]),
+    return ClassificationDecision(
+        opportunity=FilteredOpportunity(
+            organisation_name=opportunity.organisation_name,
+            title=opportunity.title,
+            category=best_category,
+            source_name=opportunity.source_name,
+            source_url=opportunity.source_url,
+            match_score=best_score,
+            match_reason=", ".join(
+                category_reasons[best_category]
+            ),
+            description=opportunity.description,
+            deadline=opportunity.deadline,
+        ),
     )
+
+
+def classify_opportunity(
+    opportunity: RawOpportunity,
+) -> FilteredOpportunity | None:
+    return classify_opportunity_with_reason(
+        opportunity
+    ).opportunity
 
 
 def filter_opportunity(

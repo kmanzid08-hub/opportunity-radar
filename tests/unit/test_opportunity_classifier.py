@@ -2,21 +2,11 @@ from __future__ import annotations
 
 from datetime import date
 
-import pytest
-
 from app.filters import classify_opportunity
 from app.schemas import RawOpportunity
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=TypeError,
-    reason=(
-        "Known contract mismatch: classify_opportunity passes raw= to "
-        "FilteredOpportunity, whose dataclass defines flattened fields."
-    ),
-)
-def test_qualifying_opportunity_exposes_filtered_contract_mismatch() -> None:
+def test_qualifying_opportunity_maps_to_filtered_contract() -> None:
     raw_opportunity = RawOpportunity(
         organisation_name="Example Public Buyer",
         title="Request for proposals for external audit services",
@@ -34,5 +24,12 @@ def test_qualifying_opportunity_exposes_filtered_contract_mismatch() -> None:
     result = classify_opportunity(raw_opportunity)
 
     assert result is not None
+    assert result.organisation_name == raw_opportunity.organisation_name
     assert result.title == raw_opportunity.title
+    assert result.category == "Audit"
+    assert result.source_name == raw_opportunity.source_name
     assert result.source_url == raw_opportunity.source_url
+    assert result.description == raw_opportunity.description
+    assert result.deadline == raw_opportunity.deadline
+    assert result.match_score == 73
+    assert result.match_reason
