@@ -194,7 +194,7 @@ class RwandaSourceDiscovery:
             }
         )
 
-    def run(self) -> dict[str, int]:
+    def run(self) -> dict[str, int | float]:
         """
         Run all configured discovery queries.
 
@@ -210,22 +210,44 @@ class RwandaSourceDiscovery:
         existing_sources = 0
         rejected_results = 0
         failed_queries = 0
+        queries_executed = 0
 
         queries = self.SEARCH_QUERIES[
             :self.MAX_QUERIES_PER_RUN
         ]
+        run_started_at = time.perf_counter()
+        configured_delay_seconds = (
+            len(queries) * self.REQUEST_DELAY_SECONDS
+        )
 
         print("=" * 65)
         print("Opportunity Radar - Source Discovery")
         print("=" * 65)
+        print(f"Queries configured: {len(queries)}")
+        print(
+            "Configured delay per query: "
+            f"{self.REQUEST_DELAY_SECONDS:.3f} seconds"
+        )
+        print(
+            "Configured delay across run: "
+            f"{configured_delay_seconds:.3f} seconds"
+        )
 
         for query_number, query in enumerate(
             queries,
             start=1,
         ):
+            query_started_at = time.perf_counter()
+            queries_executed += 1
+            query_result_count = 0
+            query_new_sources = 0
+            query_duplicates = 0
+            query_rejected = 0
+            query_failed = False
+
             print(
-                f"\nSearching {query_number}/"
-                f"{len(queries)}: {query}"
+                f"\n[QUERY {query_number}/{len(queries)}] "
+                f"{query}"
             )
 
             try:
@@ -234,63 +256,96 @@ class RwandaSourceDiscovery:
                 )
             except Exception as exc:
                 failed_queries += 1
+                query_failed = True
 
                 print(
                     f"  Search failed: "
                     f"{type(exc).__name__}: {exc}"
                 )
+            else:
+                query_result_count = len(results)
+                total_results += query_result_count
 
-                self._wait()
-                continue
+                for result in results:
+                    candidate = (
+                        self._build_candidate(
+                            result=result,
+                            query=query,
+                        )
+                    )
 
-            print(
-                f"  Search results returned: "
-                f"{len(results)}"
+                    if candidate is None:
+                        rejected_results += 1
+                        query_rejected += 1
+                        continue
+
+                    candidate_results += 1
+
+                    was_added = self._save_candidate(
+                        candidate
+                    )
+
+                    if was_added:
+                        added_sources += 1
+                        query_new_sources += 1
+
+                        print(
+                            "  [NEW SOURCE] "
+                            f"{candidate['organisation_name']}"
+                        )
+                        print(
+                            "      "
+                            f"{candidate['monitor_url']}"
+                        )
+                        print(
+                            "      Confidence: "
+                            f"{candidate['confidence_score']}"
+                        )
+                    else:
+                        existing_sources += 1
+                        query_duplicates += 1
+
+            query_runtime_seconds = (
+                time.perf_counter()
+                - query_started_at
             )
 
-            total_results += len(results)
-
-            for result in results:
-                candidate = (
-                    self._build_candidate(
-                        result=result,
-                        query=query,
-                    )
-                )
-
-                if candidate is None:
-                    rejected_results += 1
-                    continue
-
-                candidate_results += 1
-
-                was_added = self._save_candidate(
-                    candidate
-                )
-
-                if was_added:
-                    added_sources += 1
-
-                    print(
-                        "  [NEW SOURCE] "
-                        f"{candidate['organisation_name']}"
-                    )
-                    print(
-                        "      "
-                        f"{candidate['monitor_url']}"
-                    )
-                    print(
-                        "      Confidence: "
-                        f"{candidate['confidence_score']}"
-                    )
-                else:
-                    existing_sources += 1
+            print(
+                f"  Results returned: {query_result_count}"
+            )
+            print(
+                "  New sources accepted: "
+                f"{query_new_sources}"
+            )
+            print(
+                f"  Duplicates: {query_duplicates}"
+            )
+            print(
+                f"  Rejected: {query_rejected}"
+            )
+            print(
+                "  Query runtime: "
+                f"{query_runtime_seconds:.3f} seconds"
+            )
+            print(
+                "  Query status: "
+                f"{'FAILED' if query_failed else 'COMPLETED'}"
+            )
 
             self._wait()
+
+        total_runtime_seconds = (
+            time.perf_counter()
+            - run_started_at
+        )
 
         print("\n" + "=" * 65)
         print("Source discovery summary")
         print("=" * 65)
+        print(
+            f"Queries executed:              "
+            f"{queries_executed}"
+        )
         print(
             f"Search results reviewed:       "
             f"{total_results}"
@@ -316,17 +371,30 @@ class RwandaSourceDiscovery:
             f"{failed_queries}"
         )
         print(
+            f"Configured query delay:        "
+            f"{configured_delay_seconds:.3f} seconds"
+        )
+        print(
+            f"Total runtime:                 "
+            f"{total_runtime_seconds:.3f} seconds"
+        )
+        print(
             "\nNew sources are awaiting approval."
         )
         print("=" * 65)
 
         return {
+            "queries_executed": queries_executed,
             "total_results": total_results,
             "candidate_results": candidate_results,
             "added_sources": added_sources,
             "existing_sources": existing_sources,
             "rejected_results": rejected_results,
             "failed_queries": failed_queries,
+            "configured_delay_seconds": (
+                configured_delay_seconds
+            ),
+            "total_runtime_seconds": total_runtime_seconds,
         }
 
     def _search(
@@ -952,7 +1020,7 @@ class RwandaSourceDiscovery:
             return text.strip()
 
 
-def run_source_discovery() -> dict[str, int]:
+def run_source_discovery() -> dict[str, int | float]:
     discovery = RwandaSourceDiscovery()
 
     return discovery.run()
