@@ -15,7 +15,7 @@ from fastapi import (
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import get_settings
@@ -25,6 +25,7 @@ from app.models import (
     LEAD_STATUSES,
     OPPORTUNITY_STATUSES,
     Opportunity,
+    Source,
 )
 from app.internal_scheduler import scheduler
 from app.scanner import run_scanner
@@ -141,6 +142,157 @@ def opportunity_inbox_condition(
             ),
         ),
     )
+
+
+def get_dashboard_metrics(
+    now: datetime,
+) -> dict[str, int | float]:
+    """Return operational metrics shown on the dashboard."""
+    today = now.date()
+    tomorrow = now + timedelta(days=1)
+    start_of_today = now.replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    start_of_tomorrow = tomorrow.replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    start_of_week = start_of_today - timedelta(
+        days=today.weekday()
+    )
+    expiring_before = today + timedelta(days=7)
+
+    expired_condition = or_(
+        Opportunity.is_expired.is_(True),
+        and_(
+            Opportunity.deadline.is_not(None),
+            Opportunity.deadline < today,
+        ),
+    )
+    active_condition = and_(
+        opportunity_inbox_condition(now),
+        Opportunity.is_expired.is_(False),
+        or_(
+            Opportunity.deadline.is_(None),
+            Opportunity.deadline >= today,
+        ),
+    )
+    expiring_soon_condition = and_(
+        Opportunity.is_expired.is_(False),
+        Opportunity.deadline.is_not(None),
+        Opportunity.deadline >= today,
+        Opportunity.deadline <= expiring_before,
+    )
+
+    def count_when(condition: ColumnElement[bool]):
+        return func.sum(
+            case((condition, 1), else_=0)
+        )
+
+    with SessionLocal() as db:
+        opportunity_counts = db.execute(
+            select(
+                count_when(
+                    and_(
+                        Opportunity.first_discovered_at
+                        >= start_of_today,
+                        Opportunity.first_discovered_at
+                        < start_of_tomorrow,
+                    )
+                ).label("new_today"),
+                count_when(
+                    and_(
+                        Opportunity.first_discovered_at
+                        >= start_of_week,
+                        Opportunity.first_discovered_at
+                        < start_of_tomorrow,
+                    )
+                ).label("new_this_week"),
+                count_when(active_condition).label("active"),
+                count_when(expiring_soon_condition).label(
+                    "expiring_soon"
+                ),
+                count_when(expired_condition).label("expired"),
+                count_when(
+                    opportunity_archive_condition(now)
+                ).label("archived"),
+                count_when(
+                    Opportunity.is_lead.is_(True)
+                ).label("pipeline"),
+            )
+        ).one()
+
+        scanned_today_condition = and_(
+            Source.last_scanned_at.is_not(None),
+            Source.last_scanned_at >= start_of_today,
+            Source.last_scanned_at < start_of_tomorrow,
+        )
+        latest_scan_succeeded = and_(
+            scanned_today_condition,
+            Source.last_successful_scan_at.is_not(None),
+            Source.last_successful_scan_at
+            == Source.last_scanned_at,
+        )
+
+        source_counts = db.execute(
+            select(
+                count_when(scanned_today_condition).label(
+                    "scanned_today"
+                ),
+                count_when(
+                    and_(
+                        Source.first_discovered_at
+                        >= start_of_today,
+                        Source.first_discovered_at
+                        < start_of_tomorrow,
+                    )
+                ).label("discovered_today"),
+                count_when(latest_scan_succeeded).label(
+                    "successful_today"
+                ),
+            )
+        ).one()
+
+    sources_scanned_today = int(
+        source_counts.scanned_today or 0
+    )
+    successful_sources_today = int(
+        source_counts.successful_today or 0
+    )
+    scan_success_rate = (
+        round(
+            successful_sources_today
+            / sources_scanned_today
+            * 100,
+            1,
+        )
+        if sources_scanned_today
+        else 0.0
+    )
+
+    return {
+        "new_today": int(opportunity_counts.new_today or 0),
+        "new_this_week": int(
+            opportunity_counts.new_this_week or 0
+        ),
+        "active": int(opportunity_counts.active or 0),
+        "expiring_soon": int(
+            opportunity_counts.expiring_soon or 0
+        ),
+        "expired": int(opportunity_counts.expired or 0),
+        "archived": int(opportunity_counts.archived or 0),
+        "pipeline": int(opportunity_counts.pipeline or 0),
+        "sources_scanned_today": sources_scanned_today,
+        "sources_discovered_today": int(
+            source_counts.discovered_today or 0
+        ),
+        "scan_success_rate": scan_success_rate,
+    }
 
 
 def get_status_counts(
@@ -322,6 +474,8 @@ def home(
             ).where(inbox_condition)
         ) or 0
 
+    dashboard_metrics = get_dashboard_metrics(now)
+
     status_counts = get_status_counts(
         inbox_condition
     )
@@ -337,6 +491,7 @@ def home(
             "total_opportunities": (
                 total_opportunities
             ),
+            "dashboard_metrics": dashboard_metrics,
             "categories": get_categories(
                 inbox_condition
             ),

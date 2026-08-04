@@ -64,16 +64,75 @@
 
         <section class="summary-grid">
 
+            <div class="summary-card">
+                <span class="summary-label">
+                    New Today
+                </span>
+
+                <strong>
+                    {{ dashboard_metrics.new_today }}
+                </strong>
+            </div>
+
+            <div class="summary-card">
+                <span class="summary-label">
+                    New This Week
+                </span>
+
+                <strong>
+                    {{ dashboard_metrics.new_this_week }}
+                </strong>
+            </div>
+
             <a
                 href="/"
                 class="summary-card"
             >
                 <span class="summary-label">
-                    Inbox Opportunities
+                    Active
                 </span>
 
                 <strong>
-                    {{ total_opportunities }}
+                    {{ dashboard_metrics.active }}
+                </strong>
+            </a>
+
+            <a
+                href="/?deadline_filter=due_7_days"
+                class="summary-card"
+            >
+                <span class="summary-label">
+                    Expiring Soon
+                </span>
+
+                <strong>
+                    {{ dashboard_metrics.expiring_soon }}
+                </strong>
+            </a>
+
+            <a
+                href="/?deadline_filter=expired"
+                class="summary-card"
+            >
+                <span class="summary-label">
+                    Expired
+                </span>
+
+                <strong>
+                    {{ dashboard_metrics.expired }}
+                </strong>
+            </a>
+
+            <a
+                href="/?deadline_filter=archived"
+                class="summary-card"
+            >
+                <span class="summary-label">
+                    Archived
+                </span>
+
+                <strong>
+                    {{ dashboard_metrics.archived }}
                 </strong>
             </a>
 
@@ -86,61 +145,39 @@
                 </span>
 
                 <strong>
-                    {{ pipeline_count }}
+                    {{ dashboard_metrics.pipeline }}
                 </strong>
             </a>
 
-            <a
-                href="/pipeline"
-                class="summary-card"
-            >
+            <div class="summary-card">
                 <span class="summary-label">
-                    High Priority
+                    Sources Scanned Today
                 </span>
 
                 <strong>
-                    {{ high_priority_count }}
+                    {{ dashboard_metrics.sources_scanned_today }}
                 </strong>
-            </a>
+            </div>
 
-            <a
-                href="/pipeline"
-                class="summary-card"
-            >
+            <div class="summary-card">
                 <span class="summary-label">
-                    Follow-up Today
+                    Sources Discovered Today
                 </span>
 
                 <strong>
-                    {{ follow_up_today }}
+                    {{ dashboard_metrics.sources_discovered_today }}
                 </strong>
-            </a>
+            </div>
 
-            <a
-                href="/pipeline"
-                class="summary-card"
-            >
+            <div class="summary-card">
                 <span class="summary-label">
-                    Overdue Follow-ups
+                    Scan Success Rate
                 </span>
 
                 <strong>
-                    {{ overdue_followups }}
+                    {{ dashboard_metrics.scan_success_rate }}%
                 </strong>
-            </a>
-
-            <a
-                href="/?deadline_filter=due_7_days"
-                class="summary-card"
-            >
-                <span class="summary-label">
-                    Closing This Week
-                </span>
-
-                <strong>
-                    {{ closing_this_week }}
-                </strong>
-            </a>
+            </div>
 
         </section>
 
