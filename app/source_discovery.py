@@ -7,12 +7,17 @@ from dotenv import load_dotenv
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse, urlunparse
-from datetime import datetime
+from datetime import datetime, timezone
 
-from app.source_quality import (
-    SourceAssessment,
-    SourceQualityEvaluator,
+from app.discovery.categories import (
+    DISCOVERY_CATEGORIES,
+    DiscoveryCategory,
+    infer_discovery_tags,
 )
+from app.discovery.metadata import (
+    merge_discovery_metadata,
+)
+from app.source_quality import SourceQualityEvaluator
 
 import requests
 from sqlalchemy import or_, select
@@ -29,18 +34,27 @@ class SearchResult:
     description: str
 
 
-class RwandaSourceDiscovery:
-    """
-    Discover Rwandan organisation and opportunity websites using
-    the Brave Search API.
+@dataclass
+class CategoryStatistics:
+    queries_executed: int = 0
+    results: int = 0
+    accepted: int = 0
+    duplicates: int = 0
+    rejected: int = 0
+    runtime_seconds: float = 0.0
 
-    Newly discovered sources are saved for review with:
+
+class SourceDiscovery:
+    """
+    Discover organisation and opportunity websites for a country.
+
+    Qualified sources are saved with:
 
         is_active = True
-        is_approved = False
+        is_approved = True
 
-    This means the company website crawler will not scan them until
-    they have been reviewed and approved.
+    Their discovery score becomes the initial priority used by the
+    existing source scheduler.
     """
 
     API_URL = (
@@ -52,30 +66,7 @@ class RwandaSourceDiscovery:
     REQUEST_DELAY_SECONDS = 1.0
 
     RESULTS_PER_QUERY = 20
-    MAX_QUERIES_PER_RUN = 20
-
-    SEARCH_QUERIES = (
-        'Rwanda "request for proposal"',
-        'Rwanda "expression of interest"',
-        'Rwanda "invitation to bid"',
-        'Rwanda "terms of reference" consultancy',
-        'Rwanda procurement opportunities',
-        'Rwanda tender notices',
-        'Rwanda consultancy opportunities',
-        'Rwanda audit tender',
-        'Rwanda accounting consultancy',
-        'Rwanda tax consultancy tender',
-        'Rwanda recruitment consultancy',
-        'Rwanda human resources consultancy',
-        'Rwanda training consultancy',
-        'Rwanda research consultancy',
-        'Rwanda monitoring evaluation consultancy',
-        'Rwanda environmental social impact assessment tender',
-        'Rwanda NGO procurement',
-        'Rwanda university tenders',
-        'Rwanda private companies careers',
-        'Rwanda organisations vacancies careers',
-    )
+    DISCOVERY_CATEGORIES = DISCOVERY_CATEGORIES
 
     OPPORTUNITY_TERMS = (
         "tender",
@@ -129,13 +120,6 @@ class RwandaSourceDiscovery:
         "monitoring and evaluation",
     )
 
-    RWANDA_TERMS = (
-        "rwanda",
-        "rwandan",
-        "kigali",
-        ".rw",
-    )
-
     EXCLUDED_DOMAINS = (
         "google.com",
         "bing.com",
@@ -165,7 +149,18 @@ class RwandaSourceDiscovery:
         ".zip",
     )
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        country: str | None = None,
+    ) -> None:
+        self.country = (
+            country
+            or os.getenv("DISCOVERY_COUNTRY", "Rwanda")
+        ).strip()
+
+        if not self.country:
+            raise ValueError("A discovery country is required.")
+
         self.api_key = os.getenv(
             "BRAVE_API_KEY",
             "",
@@ -188,8 +183,7 @@ class RwandaSourceDiscovery:
                     self.api_key
                 ),
                 "User-Agent": (
-                    "OpportunityRadar/1.0 "
-                    "(UT CPA Ltd source discovery)"
+                    "OpportunityRadar/1.0 source-discovery"
                 ),
             }
         )
@@ -211,19 +205,31 @@ class RwandaSourceDiscovery:
         rejected_results = 0
         failed_queries = 0
         queries_executed = 0
+        query_runtime_total = 0.0
 
-        queries = self.SEARCH_QUERIES[
-            :self.MAX_QUERIES_PER_RUN
-        ]
+        category_queries = tuple(
+            (
+                category,
+                category.queries_for(self.country),
+            )
+            for category in self.DISCOVERY_CATEGORIES
+        )
+        total_configured_queries = sum(
+            len(queries)
+            for _, queries in category_queries
+        )
         run_started_at = time.perf_counter()
         configured_delay_seconds = (
-            len(queries) * self.REQUEST_DELAY_SECONDS
+            max(total_configured_queries - 1, 0)
+            * self.REQUEST_DELAY_SECONDS
         )
 
         print("=" * 65)
         print("Opportunity Radar - Source Discovery")
         print("=" * 65)
-        print(f"Queries configured: {len(queries)}")
+        print(f"Country: {self.country}")
+        print(f"Categories: {len(category_queries)}")
+        print(f"Queries configured: {total_configured_queries}")
         print(
             "Configured delay per query: "
             f"{self.REQUEST_DELAY_SECONDS:.3f} seconds"
@@ -233,142 +239,138 @@ class RwandaSourceDiscovery:
             f"{configured_delay_seconds:.3f} seconds"
         )
 
-        for query_number, query in enumerate(
-            queries,
-            start=1,
-        ):
-            query_started_at = time.perf_counter()
-            queries_executed += 1
-            query_result_count = 0
-            query_new_sources = 0
-            query_duplicates = 0
-            query_rejected = 0
-            query_failed = False
+        for category, queries in category_queries:
+            category_stats = CategoryStatistics()
 
-            print(
-                f"\n[QUERY {query_number}/{len(queries)}] "
-                f"{query}"
-            )
+            print("\n" + "-" * 65)
+            print(f"Category: {category.name}")
+            print("-" * 65)
 
-            try:
-                results = self._search(
-                    query
-                )
-            except Exception as exc:
-                failed_queries += 1
-                query_failed = True
+            for query in queries:
+                query_started_at = time.perf_counter()
+                queries_executed += 1
+                category_stats.queries_executed += 1
+                query_result_count = 0
+                query_accepted = 0
+                query_duplicates = 0
+                query_rejected = 0
+                query_failed = False
 
                 print(
-                    f"  Search failed: "
-                    f"{type(exc).__name__}: {exc}"
+                    f"[QUERY {queries_executed}/"
+                    f"{total_configured_queries}] {query}"
                 )
-            else:
-                query_result_count = len(results)
-                total_results += query_result_count
 
-                for result in results:
-                    candidate = (
-                        self._build_candidate(
+                try:
+                    results = self._search(query)
+                except Exception as exc:
+                    failed_queries += 1
+                    query_failed = True
+                    print(
+                        "  Search failed: "
+                        f"{type(exc).__name__}: {exc}"
+                    )
+                else:
+                    query_result_count = len(results)
+                    total_results += query_result_count
+                    category_stats.results += query_result_count
+
+                    for result in results:
+                        candidate = self._build_candidate(
                             result=result,
                             query=query,
+                            category=category,
                         )
-                    )
 
-                    if candidate is None:
-                        rejected_results += 1
-                        query_rejected += 1
-                        continue
+                        if candidate is None:
+                            rejected_results += 1
+                            query_rejected += 1
+                            category_stats.rejected += 1
+                            continue
 
-                    candidate_results += 1
+                        candidate_results += 1
+                        query_accepted += 1
+                        category_stats.accepted += 1
+                        was_added = self._save_candidate(candidate)
 
-                    was_added = self._save_candidate(
-                        candidate
-                    )
+                        if was_added:
+                            added_sources += 1
+                            print(
+                                "  [NEW SOURCE] "
+                                f"{candidate['organisation_name']}"
+                            )
+                            print(f"      {candidate['monitor_url']}")
+                            print(
+                                "      Discovery score: "
+                                f"{candidate['discovery_score']}"
+                            )
+                            print(
+                                "      Tags: "
+                                + ", ".join(candidate["tags"])
+                            )
+                        else:
+                            existing_sources += 1
+                            query_duplicates += 1
+                            category_stats.duplicates += 1
 
-                    if was_added:
-                        added_sources += 1
-                        query_new_sources += 1
+                query_runtime_seconds = (
+                    time.perf_counter() - query_started_at
+                )
+                query_runtime_total += query_runtime_seconds
+                category_stats.runtime_seconds += query_runtime_seconds
 
-                        print(
-                            "  [NEW SOURCE] "
-                            f"{candidate['organisation_name']}"
-                        )
-                        print(
-                            "      "
-                            f"{candidate['monitor_url']}"
-                        )
-                        print(
-                            "      Confidence: "
-                            f"{candidate['confidence_score']}"
-                        )
-                    else:
-                        existing_sources += 1
-                        query_duplicates += 1
+                print(f"  Results returned: {query_result_count}")
+                print(f"  Accepted: {query_accepted}")
+                print(f"  Duplicates: {query_duplicates}")
+                print(f"  Rejected: {query_rejected}")
+                print(
+                    "  Query runtime: "
+                    f"{query_runtime_seconds:.3f} seconds"
+                )
+                print(
+                    "  Query status: "
+                    f"{'FAILED' if query_failed else 'COMPLETED'}"
+                )
 
-            query_runtime_seconds = (
-                time.perf_counter()
-                - query_started_at
-            )
+                if queries_executed < total_configured_queries:
+                    self._wait()
 
+            print(f"Category: {category.name}")
             print(
-                f"  Results returned: {query_result_count}"
+                "  Queries executed: "
+                f"{category_stats.queries_executed}"
             )
+            print(f"  Results: {category_stats.results}")
+            print(f"  Accepted: {category_stats.accepted}")
+            print(f"  Duplicates: {category_stats.duplicates}")
+            print(f"  Rejected: {category_stats.rejected}")
             print(
-                "  New sources accepted: "
-                f"{query_new_sources}"
+                "  Runtime: "
+                f"{category_stats.runtime_seconds:.3f} seconds"
             )
-            print(
-                f"  Duplicates: {query_duplicates}"
-            )
-            print(
-                f"  Rejected: {query_rejected}"
-            )
-            print(
-                "  Query runtime: "
-                f"{query_runtime_seconds:.3f} seconds"
-            )
-            print(
-                "  Query status: "
-                f"{'FAILED' if query_failed else 'COMPLETED'}"
-            )
-
-            self._wait()
 
         total_runtime_seconds = (
             time.perf_counter()
             - run_started_at
         )
+        average_runtime_seconds = (
+            query_runtime_total / queries_executed
+            if queries_executed
+            else 0.0
+        )
 
         print("\n" + "=" * 65)
         print("Source discovery summary")
         print("=" * 65)
+        print(f"Total queries:                 {queries_executed}")
+        print(f"Total results:                 {total_results}")
+        print(f"New sources:                   {added_sources}")
+        print(f"Duplicates:                    {existing_sources}")
+        print(f"Rejected:                      {rejected_results}")
+        print(f"Failed queries:                {failed_queries}")
         print(
-            f"Queries executed:              "
-            f"{queries_executed}"
-        )
-        print(
-            f"Search results reviewed:       "
-            f"{total_results}"
-        )
-        print(
-            f"Candidate websites identified: "
-            f"{candidate_results}"
-        )
-        print(
-            f"New sources saved:             "
-            f"{added_sources}"
-        )
-        print(
-            f"Already known sources:         "
-            f"{existing_sources}"
-        )
-        print(
-            f"Rejected search results:       "
-            f"{rejected_results}"
-        )
-        print(
-            f"Failed search queries:         "
-            f"{failed_queries}"
+            "Average runtime:               "
+            f"{average_runtime_seconds:.3f} seconds"
         )
         print(
             f"Configured query delay:        "
@@ -379,7 +381,7 @@ class RwandaSourceDiscovery:
             f"{total_runtime_seconds:.3f} seconds"
         )
         print(
-            "\nNew sources are awaiting approval."
+            "\nQualified sources were saved with discovery priority."
         )
         print("=" * 65)
 
@@ -395,6 +397,8 @@ class RwandaSourceDiscovery:
                 configured_delay_seconds
             ),
             "total_runtime_seconds": total_runtime_seconds,
+            "average_runtime_seconds": average_runtime_seconds,
+            "categories_processed": len(category_queries),
         }
 
     def _search(
@@ -465,12 +469,14 @@ class RwandaSourceDiscovery:
         self,
         result: SearchResult,
         query: str,
+        category: DiscoveryCategory,
     ) -> dict[str, object] | None:
         assessment = self.quality_evaluator.assess(
             title=result.title,
             description=result.description,
             url=result.url,
             discovery_query=query,
+            country=self.country,
         )
 
         if not assessment.accepted:
@@ -483,6 +489,13 @@ class RwandaSourceDiscovery:
         domain = (
             self.quality_evaluator
             .normalise_domain(parsed.netloc)
+        )
+        tags = infer_discovery_tags(
+            category=category,
+            title=result.title,
+            description=result.description,
+            url=assessment.monitor_url,
+            source_type=assessment.source_type,
         )
 
         return {
@@ -499,6 +512,10 @@ class RwandaSourceDiscovery:
             ),
             "discovered_from": result.url,
             "discovery_query": query,
+            "discovery_category": category.name,
+            "tags": tags,
+            "discovery_score": assessment.discovery_score,
+            "score_components": assessment.score_components,
             "confidence_score": (
                 assessment.confidence_score
             ),
@@ -512,7 +529,7 @@ class RwandaSourceDiscovery:
             "is_approved": True,
             "is_auto_disabled": False,
             "last_discovered_at": (
-                datetime.utcnow()
+                datetime.now(timezone.utc)
             ),
         }
 
@@ -523,9 +540,31 @@ class RwandaSourceDiscovery:
         monitor_url = str(
             candidate["monitor_url"]
         )
+        monitor_url = self.quality_evaluator.normalise_url(
+            monitor_url
+        )
 
         domain = str(
             candidate["domain"]
+        )
+        domain = self.quality_evaluator.normalise_domain(
+            domain
+        )
+
+        if not monitor_url or not domain:
+            return False
+
+        candidate = {
+            **candidate,
+            "monitor_url": monitor_url,
+            "domain": domain,
+        }
+
+        discovery_metadata = merge_discovery_metadata(
+            None,
+            categories=(str(candidate["discovery_category"]),),
+            queries=(str(candidate["discovery_query"]),),
+            tags=tuple(candidate["tags"]),
         )
 
         with SessionLocal() as db:
@@ -564,9 +603,7 @@ class RwandaSourceDiscovery:
                 discovered_from=str(
                     candidate["discovered_from"]
                 ),
-                discovery_query=str(
-                    candidate["discovery_query"]
-                ),
+                discovery_query=discovery_metadata,
                 confidence_score=float(
                     candidate["confidence_score"]
                 ),
@@ -583,7 +620,7 @@ class RwandaSourceDiscovery:
                 is_auto_disabled=False,
                 scan_interval_hours=12,
                 last_discovered_at=(
-                    datetime.utcnow()
+                    datetime.now(timezone.utc)
                 ),
             )
 
@@ -609,16 +646,19 @@ class RwandaSourceDiscovery:
             existing.url_relevance_score or 0
         )
 
+        existing.discovery_query = merge_discovery_metadata(
+            existing.discovery_query,
+            categories=(str(candidate["discovery_category"]),),
+            queries=(str(candidate["discovery_query"]),),
+            tags=tuple(candidate["tags"]),
+        )
+
         if (
             candidate_confidence
             > float(existing.confidence_score or 0)
         ):
             existing.confidence_score = (
                 candidate_confidence
-            )
-
-            existing.discovery_query = str(
-                candidate["discovery_query"]
             )
 
             existing.discovered_from = str(
@@ -658,7 +698,7 @@ class RwandaSourceDiscovery:
         existing.is_auto_disabled = False
         existing.disabled_reason = None
         existing.last_discovered_at = (
-            datetime.utcnow()
+            datetime.now(timezone.utc)
         )
         
     def _calculate_confidence(
@@ -672,14 +712,11 @@ class RwandaSourceDiscovery:
             """
             score = 0.0
 
-            if domain.endswith(".rw"):
+            if ".gov." in domain or ".ac." in domain:
                 score += 30
 
-            if "rwanda" in combined_text:
+            if self.country.lower() in combined_text:
                 score += 20
-
-            if "kigali" in combined_text:
-                score += 10
 
             opportunity_matches = sum(
                 1
@@ -726,18 +763,15 @@ class RwandaSourceDiscovery:
                 100.0,
             )
 
-    def _looks_rwandan(
+    def _looks_country_relevant(
             self,
             combined_text: str,
             domain: str,
         ) -> bool:
-            if domain.endswith(".rw"):
+            if ".gov." in domain or ".ac." in domain:
                 return True
 
-            return any(
-                term in combined_text
-                for term in self.RWANDA_TERMS
-            )
+            return self.country.lower() in combined_text
 
     def _infer_organisation_name(
             self,
@@ -828,7 +862,7 @@ class RwandaSourceDiscovery:
                         "authority",
                         "district",
                         "public institution",
-                        ".gov.rw",
+                        ".gov.",
                     ),
                 ),
                 (
@@ -837,7 +871,8 @@ class RwandaSourceDiscovery:
                         "university",
                         "college",
                         "institute of higher education",
-                        ".ac.rw",
+                        ".ac.",
+                        ".edu.",
                     ),
                 ),
                 (
@@ -864,7 +899,7 @@ class RwandaSourceDiscovery:
                     "Job Portal",
                     (
                         "job portal",
-                        "jobs in rwanda",
+                        "jobs portal",
                         "vacancy portal",
                     ),
                 ),
@@ -1020,8 +1055,10 @@ class RwandaSourceDiscovery:
             return text.strip()
 
 
-def run_source_discovery() -> dict[str, int | float]:
-    discovery = RwandaSourceDiscovery()
+def run_source_discovery(
+    country: str | None = None,
+) -> dict[str, int | float]:
+    discovery = SourceDiscovery(country=country)
 
     return discovery.run()
 

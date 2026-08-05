@@ -46,7 +46,7 @@ def test_source_quality_normalization_requires_absolute_http_url() -> None:
     assert evaluator.normalise_url("example.test/tenders") == ""
     assert evaluator.normalise_url(
         "HTTPS://Example.Test/tenders/?a=1#details"
-    ) == ""
+    ) == "https://example.test/tenders"
     assert evaluator.normalise_url(
         "https://Example.Test/tenders/?a=1#details"
     ) == "https://example.test/tenders"

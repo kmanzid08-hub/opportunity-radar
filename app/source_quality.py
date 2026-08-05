@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import urlparse, urlunparse
 
 
 @dataclass
 class SourceAssessment:
     accepted: bool
+    discovery_score: float
     confidence_score: float
     priority_score: float
     url_relevance_score: float
@@ -16,6 +17,9 @@ class SourceAssessment:
     base_url: str
     monitor_url: str
     rejection_reason: str | None = None
+    score_components: dict[str, float] = field(
+        default_factory=dict
+    )
 
 
 class SourceQualityEvaluator:
@@ -45,7 +49,6 @@ class SourceQualityEvaluator:
         "glassdoor.com",
         "indeed.com",
         "careers.org",
-        "rwandayp.com",
         "techbehemoths.com",
     }
 
@@ -172,6 +175,7 @@ class SourceQualityEvaluator:
         description: str,
         url: str,
         discovery_query: str,
+        country: str,
     ) -> SourceAssessment:
         normalised_url = self.normalise_url(url)
 
@@ -213,63 +217,13 @@ class SourceQualityEvaluator:
                 "The result appears informational rather than an opportunity source."
             )
 
-        confidence_score = 0.0
-
-        if domain.endswith(".gov.rw"):
-            confidence_score += 45
-        elif domain.endswith(".ac.rw"):
-            confidence_score += 40
-        elif domain.endswith(".rw"):
-            confidence_score += 30
-
-        if "rwanda" in combined_text:
-            confidence_score += 15
-
-        if "kigali" in combined_text:
-            confidence_score += 5
-
-        opportunity_matches = sum(
-            1
-            for term in self.OPPORTUNITY_TERMS
-            if term in combined_text
-        )
-
-        confidence_score += min(
-            opportunity_matches * 5,
-            25,
-        )
-
-        organisation_matches = sum(
-            1
-            for term in self.TRUSTED_ORGANISATION_TERMS
-            if term in combined_text
-        )
-
-        confidence_score += min(
-            organisation_matches * 4,
-            20,
-        )
-
         path_score = self.calculate_url_relevance(
             normalised_url
-        )
-
-        confidence_score += min(
-            path_score * 0.25,
-            15,
         )
 
         is_aggregator = any(
             term in combined_text
             for term in self.AGGREGATOR_TERMS
-        )
-
-        if is_aggregator:
-            confidence_score -= 10
-
-        confidence_score = max(
-            0.0,
-            min(round(confidence_score, 2), 100.0),
         )
 
         source_type = self.infer_source_type(
@@ -289,22 +243,39 @@ class SourceQualityEvaluator:
             normalised_url
         )
 
-        priority_score = self.calculate_priority(
-            confidence_score=confidence_score,
-            source_type=source_type,
-            url_relevance_score=path_score,
+        score_components = {
+            "domain_quality": self.calculate_domain_quality(
+                normalised_url
+            ),
+            "url_relevance": path_score,
+            "keyword_relevance": self.calculate_keyword_relevance(
+                combined_text
+            ),
+            "page_title": self.calculate_title_relevance(title),
+            "organisation_confidence": (
+                self.calculate_organisation_confidence(
+                    text=combined_text,
+                    source_type=source_type,
+                    organisation_name=organisation_name,
+                    country=country,
+                )
+            ),
+        }
+        discovery_score = self.calculate_discovery_score(
+            components=score_components,
             is_aggregator=is_aggregator,
         )
 
         accepted = (
-            confidence_score
+            discovery_score
             >= self.MINIMUM_AUTO_APPROVAL_SCORE
         )
 
         return SourceAssessment(
             accepted=accepted,
-            confidence_score=confidence_score,
-            priority_score=priority_score,
+            discovery_score=discovery_score,
+            confidence_score=discovery_score,
+            priority_score=discovery_score,
             url_relevance_score=path_score,
             source_type=source_type,
             organisation_name=organisation_name,
@@ -313,8 +284,9 @@ class SourceQualityEvaluator:
             rejection_reason=(
                 None
                 if accepted
-                else "Confidence score is below the automatic approval threshold."
+                else "Discovery score is below the automatic approval threshold."
             ),
+            score_components=score_components,
         )
 
     def choose_monitor_url(
@@ -368,6 +340,105 @@ class SourceQualityEvaluator:
 
         return min(score, 100.0)
 
+    def calculate_domain_quality(
+        self,
+        url: str,
+    ) -> float:
+        parsed = urlparse(url)
+        domain = self.normalise_domain(parsed.netloc)
+
+        if ".gov." in domain or domain.startswith("gov."):
+            score = 100.0
+        elif ".ac." in domain or ".edu." in domain:
+            score = 90.0
+        elif domain.endswith((".org", ".int")):
+            score = 80.0
+        elif len(domain.rsplit(".", maxsplit=1)[-1]) == 2:
+            score = 75.0
+        else:
+            score = 55.0
+
+        if parsed.scheme == "https":
+            score += 5
+
+        return min(score, 100.0)
+
+    def calculate_keyword_relevance(
+        self,
+        text: str,
+    ) -> float:
+        matches = sum(
+            1
+            for term in self.OPPORTUNITY_TERMS
+            if term in text.lower()
+        )
+
+        return min(matches * 20.0, 100.0)
+
+    def calculate_title_relevance(
+        self,
+        title: str,
+    ) -> float:
+        cleaned_title = self.clean_text(title).lower()
+
+        if not cleaned_title:
+            return 0.0
+
+        matches = sum(
+            1
+            for term in self.OPPORTUNITY_TERMS
+            if term in cleaned_title
+        )
+        score = 35.0 + matches * 25.0
+
+        return min(score, 100.0)
+
+    def calculate_organisation_confidence(
+        self,
+        *,
+        text: str,
+        source_type: str,
+        organisation_name: str,
+        country: str,
+    ) -> float:
+        matches = sum(
+            1
+            for term in self.TRUSTED_ORGANISATION_TERMS
+            if term in text.lower()
+        )
+        score = min(matches * 20.0, 60.0)
+
+        if source_type != "Organisation":
+            score += 25.0
+
+        if organisation_name.strip():
+            score += 10.0
+
+        cleaned_country = self.clean_text(country).lower()
+        if cleaned_country and cleaned_country in text.lower():
+            score += 5.0
+
+        return min(score, 100.0)
+
+    @staticmethod
+    def calculate_discovery_score(
+        *,
+        components: dict[str, float],
+        is_aggregator: bool,
+    ) -> float:
+        score = (
+            components["domain_quality"] * 0.25
+            + components["url_relevance"] * 0.20
+            + components["keyword_relevance"] * 0.25
+            + components["page_title"] * 0.15
+            + components["organisation_confidence"] * 0.15
+        )
+
+        if is_aggregator:
+            score -= 10.0
+
+        return max(0.0, min(round(score, 2), 100.0))
+
     def calculate_priority(
         self,
         *,
@@ -403,7 +474,7 @@ class SourceQualityEvaluator:
             (
                 "Government Institution",
                 (
-                    ".gov.rw",
+                    ".gov.",
                     "government",
                     "ministry",
                     "authority",
@@ -415,7 +486,8 @@ class SourceQualityEvaluator:
             (
                 "University",
                 (
-                    ".ac.rw",
+                    ".ac.",
+                    ".edu.",
                     "university",
                     "college",
                     "higher education",
@@ -456,7 +528,7 @@ class SourceQualityEvaluator:
                 "Job Portal",
                 (
                     "job portal",
-                    "jobs in rwanda",
+                    "jobs portal",
                     "career portal",
                 ),
             ),
@@ -554,14 +626,15 @@ class SourceQualityEvaluator:
     ) -> str:
         value = self.clean_text(url)
 
-        if not value.startswith(
-            ("http://", "https://")
-        ):
+        try:
+            parsed = urlparse(value)
+        except ValueError:
             return ""
 
-        parsed = urlparse(value)
-
-        if not parsed.netloc:
+        if (
+            parsed.scheme.lower() not in {"http", "https"}
+            or not parsed.netloc
+        ):
             return ""
 
         path = parsed.path.rstrip("/")
@@ -620,6 +693,7 @@ class SourceQualityEvaluator:
     ) -> SourceAssessment:
         return SourceAssessment(
             accepted=False,
+            discovery_score=0.0,
             confidence_score=0.0,
             priority_score=0.0,
             url_relevance_score=0.0,
@@ -628,4 +702,5 @@ class SourceQualityEvaluator:
             base_url="",
             monitor_url="",
             rejection_reason=reason,
+            score_components={},
         )
