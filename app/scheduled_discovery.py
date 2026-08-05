@@ -1,14 +1,36 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
 
+from app.core.config import FALSE_VALUES, TRUE_VALUES, SettingsError
 from app.database import engine
 from app.source_discovery import run_source_discovery
 
 JOB_NAME = "website_discovery"
 INTERVAL = timedelta(days=5)
+FORCE_SETTING = "FORCE_WEBSITE_DISCOVERY"
+
+
+def _force_discovery_enabled() -> bool:
+    value = os.getenv(FORCE_SETTING, "false")
+    normalised = value.strip().lower()
+
+    if normalised in TRUE_VALUES:
+        return True
+
+    if normalised in FALSE_VALUES:
+        return False
+
+    accepted = ", ".join(
+        sorted(TRUE_VALUES | FALSE_VALUES)
+    )
+    raise SettingsError(
+        f"{FORCE_SETTING} must be one of: {accepted}; "
+        f"received {value!r}."
+    )
 
 
 def _utc_now() -> datetime:
@@ -70,16 +92,28 @@ def _record_success(completed_at: datetime) -> None:
 
 
 def main() -> int:
+    force_discovery = _force_discovery_enabled()
     _ensure_state_table()
     now = _utc_now()
     last_success = _last_success()
 
-    if last_success is not None and now < last_success + INTERVAL:
+    if (
+        not force_discovery
+        and last_success is not None
+        and now < last_success + INTERVAL
+    ):
         next_run = last_success + INTERVAL
         print(f"Website discovery is not due. Next due: {next_run.isoformat()}")
         return 0
 
-    print("Website discovery is due. Starting discovery...")
+    if force_discovery:
+        print(
+            "Website discovery was manually forced. "
+            "Starting discovery..."
+        )
+    else:
+        print("Website discovery is due. Starting discovery...")
+
     result = run_source_discovery()
     _record_success(_utc_now())
     print(f"Website discovery completed successfully: {result}")

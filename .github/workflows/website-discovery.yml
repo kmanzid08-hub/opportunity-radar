@@ -20,6 +20,7 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
       ENABLE_INTERNAL_SCHEDULER: "false"
+      FORCE_WEBSITE_DISCOVERY: ${{ github.event_name == 'workflow_dispatch' }}
 
     steps:
       - name: Check out repository
