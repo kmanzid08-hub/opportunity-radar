@@ -4,9 +4,7 @@ from sqlalchemy import inspect, select
 from sqlalchemy.orm import configure_mappers
 
 from app.database import Base
-from app.lead_models import Lead
-from app.models import Opportunity, Source  # noqa: F401
-from app.proposal_models import Proposal
+from app.models import Lead, Opportunity, Proposal, Source  # noqa: F401
 
 
 def test_all_declared_models_configure_together() -> None:

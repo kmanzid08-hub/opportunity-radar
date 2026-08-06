@@ -383,6 +383,23 @@ GENERIC_TITLES: tuple[str, ...] = (
     "rwanda",
 )
 
+AGGREGATE_LISTING_TERMS: tuple[str, ...] = (
+    "advanced search",
+    "filter country",
+    "list of tenders",
+    "no of entries",
+    "search results",
+    "tender listings",
+    "total tenders",
+)
+
+AGGREGATE_REPEATED_MARKERS: tuple[str, ...] = (
+    "publish date",
+    "closing date",
+    "tender type",
+    "country",
+)
+
 DOCUMENT_EXTENSIONS: tuple[str, ...] = (
     ".pdf",
     ".doc",
@@ -457,6 +474,48 @@ def is_procurement_document(opportunity: RawOpportunity) -> bool:
     return bool(find_matches(document_text, DOCUMENT_PROCUREMENT_HINTS))
 
 
+def aggregate_listing_reason(
+    opportunity: RawOpportunity,
+) -> str | None:
+    """Identify index/search pages that contain several separate notices."""
+    title = normalise_text(getattr(opportunity, "title", ""))
+    description = normalise_text(
+        getattr(opportunity, "description", "")
+    )
+    combined = f"{title} {description}".strip()
+
+    repeated_markers = sorted(
+        marker
+        for marker in AGGREGATE_REPEATED_MARKERS
+        if description.count(marker) >= 2
+    )
+    aggregate_terms = find_matches(
+        combined,
+        AGGREGATE_LISTING_TERMS,
+    )
+
+    if len(repeated_markers) >= 2:
+        return (
+            "aggregate listing page contains multiple notices "
+            f"(repeated markers: {', '.join(repeated_markers)})"
+        )
+
+    if len(aggregate_terms) >= 2 and len(description) >= 1_000:
+        return (
+            "aggregate listing/search page was detected "
+            f"(indicators: {', '.join(aggregate_terms)})"
+        )
+
+    if (
+        len(title) >= 160
+        and "advanced search" in title
+        and ("tender" in title or "opportunit" in title)
+    ):
+        return "aggregate listing/search page has a generated index title"
+
+    return None
+
+
 def classify_opportunity_with_reason(
     opportunity: RawOpportunity,
 ) -> ClassificationDecision:
@@ -473,6 +532,13 @@ def classify_opportunity_with_reason(
         return ClassificationDecision(
             opportunity=None,
             rejection_reason="no searchable opportunity content",
+        )
+
+    aggregate_reason = aggregate_listing_reason(opportunity)
+    if aggregate_reason is not None:
+        return ClassificationDecision(
+            opportunity=None,
+            rejection_reason=aggregate_reason,
         )
 
     strong_procurement = find_matches(text, STRONG_PROCUREMENT_TERMS)

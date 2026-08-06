@@ -224,6 +224,19 @@ textarea {
     gap: 16px;
 }
 
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    margin: 22px 0;
+}
+
+.pagination span {
+    color: var(--muted);
+    font-weight: 700;
+}
+
 .opportunity-card {
     display: grid;
     grid-template-columns:

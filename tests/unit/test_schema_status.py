@@ -148,7 +148,24 @@ def test_blank_url_is_rejected(database_url: str) -> None:
         inspect_schema(database_url)
 
 
-def test_inspection_does_not_import_runtime_application() -> None:
-    assert "app.main" not in sys.modules
-    assert "app.internal_scheduler" not in sys.modules
-    assert "app.scanner" not in sys.modules
+def test_inspection_does_not_import_runtime_application(
+    temporary_database: Path,
+) -> None:
+    runtime_modules = (
+        "app.main",
+        "app.internal_scheduler",
+        "app.scanner",
+    )
+    before = {
+        module_name: sys.modules.get(module_name)
+        for module_name in runtime_modules
+    }
+
+    temporary_database.touch()
+    inspect_schema(_database_url(temporary_database))
+
+    after = {
+        module_name: sys.modules.get(module_name)
+        for module_name in runtime_modules
+    }
+    assert after == before

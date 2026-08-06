@@ -370,3 +370,11 @@ class Source(Base):
         String(500),
         nullable=True,
     )
+
+
+# Register relationship targets whenever the primary model module is loaded.
+# Several command-line entry points only query Source, but SQLAlchemy still
+# configures every mapper in this registry and must be able to resolve these
+# string relationship names.
+from app.lead_models import Lead as Lead  # noqa: E402
+from app.proposal_models import Proposal as Proposal  # noqa: E402

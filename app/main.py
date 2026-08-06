@@ -32,6 +32,7 @@ from app.scanner import run_scanner
 
 
 BASE_DIR = Path(__file__).resolve().parent
+DASHBOARD_PAGE_SIZE = 50
 
 
 @asynccontextmanager
@@ -350,6 +351,7 @@ def home(
     q: Annotated[str | None, Query()] = None,
     category: Annotated[str | None, Query()] = None,
     status: Annotated[str | None, Query()] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
     deadline_filter: Annotated[
         str | None,
         Query(),
@@ -456,16 +458,37 @@ def home(
             <= thirty_days_from_now,
         )
 
+    filtered_count_statement = select(
+        func.count()
+    ).select_from(statement.subquery())
+
     statement = statement.order_by(
+        Opportunity.first_discovered_at.desc(),
         Opportunity.is_expired.asc(),
         Opportunity.deadline.is_(None),
         Opportunity.deadline.asc(),
-        Opportunity.first_discovered_at.desc(),
     )
 
     with SessionLocal() as db:
+        filtered_total = db.scalar(
+            filtered_count_statement
+        ) or 0
+        total_pages = max(
+            1,
+            (
+                filtered_total
+                + DASHBOARD_PAGE_SIZE
+                - 1
+            )
+            // DASHBOARD_PAGE_SIZE,
+        )
+        current_page = min(page, total_pages)
+
         opportunities = db.scalars(
-            statement
+            statement.offset(
+                (current_page - 1)
+                * DASHBOARD_PAGE_SIZE
+            ).limit(DASHBOARD_PAGE_SIZE)
         ).all()
 
         total_opportunities = db.scalar(
@@ -488,9 +511,13 @@ def home(
             "filtered_count": len(
                 opportunities
             ),
+            "filtered_total": filtered_total,
             "total_opportunities": (
                 total_opportunities
             ),
+            "page": current_page,
+            "page_size": DASHBOARD_PAGE_SIZE,
+            "total_pages": total_pages,
             "dashboard_metrics": dashboard_metrics,
             "categories": get_categories(
                 inbox_condition

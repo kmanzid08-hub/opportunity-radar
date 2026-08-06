@@ -328,3 +328,58 @@ def test_refresh_restores_undated_opportunity_to_inbox(
         "Refreshable undated opportunity"
         in client.get("/").text
     )
+
+
+def test_dashboard_paginates_and_shows_newest_records_first(
+    client,
+    isolated_session_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app import main
+
+    now = datetime(
+        2026,
+        8,
+        6,
+        12,
+        0,
+        tzinfo=timezone.utc,
+    )
+    monkeypatch.setattr(
+        main,
+        "current_utc_time",
+        lambda: now,
+    )
+
+    records = tuple(
+        _opportunity(
+            title=f"Opportunity {number:02d}",
+            now=now,
+            deadline_offset_days=90,
+            last_seen_age_days=number,
+        )
+        for number in range(55)
+    )
+
+    with isolated_session_factory() as session:
+        session.add_all(records)
+        session.commit()
+
+    first_page = client.get("/")
+
+    assert first_page.status_code == 200
+    assert len(first_page.context["opportunities"]) == 50
+    assert first_page.context["filtered_total"] == 55
+    assert first_page.context["page"] == 1
+    assert first_page.context["total_pages"] == 2
+    assert first_page.context["opportunities"][0].title == "Opportunity 00"
+    assert "Opportunity 54" not in first_page.text
+    assert "Page 1 of 2" in first_page.text
+
+    second_page = client.get("/?page=2")
+
+    assert second_page.status_code == 200
+    assert len(second_page.context["opportunities"]) == 5
+    assert second_page.context["page"] == 2
+    assert second_page.context["opportunities"][-1].title == "Opportunity 54"
+    assert "Page 2 of 2" in second_page.text

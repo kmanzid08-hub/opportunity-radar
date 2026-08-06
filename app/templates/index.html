@@ -346,11 +346,13 @@
 
                 <p>
                     {% if selected_deadline == "archived" %}
-                        Showing {{ filtered_count }} archived
+                        Showing {{ filtered_count }} of
+                        {{ filtered_total }} archived
                         opportunities
                     {% else %}
-                        Showing {{ filtered_count }}
-                        of {{ total_opportunities }} inbox
+                        Showing {{ filtered_count }} of
+                        {{ filtered_total }} matching;
+                        {{ total_opportunities }} total inbox
                         opportunities
                     {% endif %}
                 </p>
@@ -566,6 +568,35 @@
                 {% endfor %}
 
             </section>
+
+            {% if total_pages > 1 %}
+                <nav
+                    class="pagination"
+                    aria-label="Opportunity pages"
+                >
+                    {% if page > 1 %}
+                        <a
+                            class="secondary-button"
+                            href="{{ request.url.include_query_params(page=page - 1) }}"
+                        >
+                            Previous
+                        </a>
+                    {% endif %}
+
+                    <span>
+                        Page {{ page }} of {{ total_pages }}
+                    </span>
+
+                    {% if page < total_pages %}
+                        <a
+                            class="secondary-button"
+                            href="{{ request.url.include_query_params(page=page + 1) }}"
+                        >
+                            Next
+                        </a>
+                    {% endif %}
+                </nav>
+            {% endif %}
 
         {% else %}
 
