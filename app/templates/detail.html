@@ -1,440 +1,757 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>
         {{ opportunity.title }} | Opportunity Radar
     </title>
 
-    <link
-        rel="stylesheet"
-        href="{{ url_for('static', path='/style.css') }}"
-    >
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=4">
 </head>
 
 <body>
-    <header class="main-header">
-        <div class="header-content">
-            <div>
-                <h1>Opportunity Radar</h1>
 
-                <p>
-                    Opportunity review and workflow management
-                </p>
-            </div>
+    <header class="app-header">
 
-            <a
-                href="/"
-                class="header-button"
-            >
-                Back to Dashboard
-            </a>
-        </div>
-    </header>
+        <div class="app-header-inner">
 
-    <main class="page-container detail-container">
-        <section class="detail-card">
-            <div class="badge-row">
-                <span class="badge category-badge">
-                    {{ opportunity.category }}
+            <a href="/" class="brand">
+                <span class="brand-mark">
+                    OR
                 </span>
 
-                <span
-                    class="
+                <span>
+                    <strong>
+                        Opportunity Radar
+                    </strong>
+
+                    <small>
+                        Business opportunity intelligence
+                    </small>
+                </span>
+            </a>
+
+
+            <div class="topbar-actions">
+
+                <nav class="main-nav" aria-label="Primary navigation">
+                    <a href="/" class="nav-link">
+                        Discover
+                    </a>
+
+                    <a href="/pipeline" class="nav-link">
+                        Pipeline
+                    </a>
+
+                    <a href="/?deadline_filter=archived" class="nav-link">
+                        Archived
+                    </a>
+
+                    <a href="/business-profile" class="nav-link">
+                        Business Profile
+                    </a>
+                </nav>
+
+            </div>
+
+        </div>
+
+    </header>
+
+
+    <main class="discover-shell detail-page-shell">
+
+        <div class="detail-back-row">
+
+            <a href="/" class="source-link">
+                ← Back to opportunities
+            </a>
+
+        </div>
+
+
+        <section class="detail-hero-card">
+
+            <div class="detail-hero-main">
+
+                <div class="badge-row">
+
+                    <span class="
+                        badge
+                        category-badge
+                    ">
+                        {{
+                        opportunity.category
+                        or "Uncategorised"
+                        }}
+                    </span>
+
+
+                    <span class="
                         badge
                         status-badge
                         status-{{ opportunity.status|lower }}
-                    "
-                >
-                    {{ opportunity.status }}
-                </span>
+                    ">
+                        {{ opportunity.status }}
+                    </span>
 
-                {% if opportunity.is_expired %}
-                    <span class="badge expired-badge">
+
+                    {% if opportunity.is_lead %}
+
+                    <span class="
+                            badge
+                            pipeline-badge
+                        ">
+                        In pipeline
+                    </span>
+
+                    {% endif %}
+
+
+                    {% if opportunity.is_expired %}
+
+                    <span class="
+                            badge
+                            expired-badge
+                        ">
                         Deadline passed
                     </span>
-                {% endif %}
-            </div>
 
-            <h2>{{ opportunity.title }}</h2>
+                    {% endif %}
 
-            <p class="detail-organisation">
-                {{
+                </div>
+
+
+                <h1 class="detail-title">
+                    {{ opportunity.title }}
+                </h1>
+
+
+                <p class="detail-organisation">
+
+                    {{
                     opportunity.organisation_name
                     or "Organisation not specified"
-                }}
-            </p>
+                    }}
 
-            <div class="detail-metadata">
-                <div>
-                    <span class="metadata-label">
-                        Deadline
-                    </span>
+                </p>
 
-                    <strong>
-                        {% if opportunity.deadline %}
+
+                <div class="detail-key-metrics">
+
+                    <div class="detail-metric">
+
+                        <span class="metadata-label">
+                            Match score
+                        </span>
+
+                        <strong>
+
+                            {% if opportunity.match_score is not none %}
+                            {{ opportunity.match_score }}
+                            {% else %}
+                            —
+                            {% endif %}
+
+                        </strong>
+
+                    </div>
+
+
+                    <div class="detail-metric">
+
+                        <span class="metadata-label">
+                            Deadline
+                        </span>
+
+                        <strong>
+
+                            {% if opportunity.deadline %}
+
                             {{
-                                opportunity.deadline.strftime(
-                                    "%d %B %Y"
-                                )
+                            opportunity.deadline.strftime(
+                            "%d %b %Y"
+                            )
                             }}
-                        {% else %}
+
+                            {% else %}
+
                             Not identified
-                        {% endif %}
-                    </strong>
-                </div>
 
-                <div>
-                    <span class="metadata-label">
-                        Source
-                    </span>
+                            {% endif %}
 
-                    <strong>
-                        {{ opportunity.source_name }}
-                    </strong>
-                </div>
+                        </strong>
 
-                <div>
-                    <span class="metadata-label">
-                        Match score
-                    </span>
+                    </div>
 
-                    <strong>
-                        {{
-                            opportunity.match_score
-                            if opportunity.match_score
-                            is not none
-                            else "Not scored"
-                        }}
-                    </strong>
-                </div>
 
-                <div>
-                    <span class="metadata-label">
-                        First discovered
-                    </span>
+                    <div class="detail-metric">
 
-                    <strong>
-                        {% if opportunity.first_discovered_at %}
+                        <span class="metadata-label">
+                            Source
+                        </span>
+
+                        <strong>
+
                             {{
-                                opportunity.first_discovered_at.strftime(
-                                    "%d %B %Y"
-                                )
+                            opportunity.source_name
+                            or "Not specified"
                             }}
-                        {% else %}
-                            Not recorded
-                        {% endif %}
-                    </strong>
-                </div>
 
-                <div>
-                    <span class="metadata-label">
-                        Last seen
-                    </span>
+                        </strong>
 
-                    <strong>
-                        {% if opportunity.last_seen_at %}
+                    </div>
+
+
+                    <div class="detail-metric">
+
+                        <span class="metadata-label">
+                            First discovered
+                        </span>
+
+                        <strong>
+
+                            {% if opportunity.first_discovered_at %}
+
                             {{
-                                opportunity.last_seen_at.strftime(
-                                    "%d %B %Y at %H:%M"
-                                )
+                            opportunity.first_discovered_at.strftime(
+                            "%d %b %Y"
+                            )
                             }}
-                        {% else %}
+
+                            {% else %}
+
                             Not recorded
-                        {% endif %}
-                    </strong>
+
+                            {% endif %}
+
+                        </strong>
+
+                    </div>
+
+
+                    <div class="detail-metric">
+
+                        <span class="metadata-label">
+                            Last seen
+                        </span>
+
+                        <strong>
+
+                            {% if opportunity.last_seen_at %}
+
+                            {{
+                            opportunity.last_seen_at.strftime(
+                            "%d %b %Y"
+                            )
+                            }}
+
+                            {% else %}
+
+                            Not recorded
+
+                            {% endif %}
+
+                        </strong>
+
+                    </div>
+
                 </div>
+
             </div>
 
-            <div class="detail-actions">
-    <a
-        href="{{ opportunity.source_url }}"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="primary-button"
-    >
-        Open Original Notice
-    </a>
 
-    {% if opportunity.is_lead %}
-        <span class="badge pipeline-badge">
-            ✓ In Pipeline
-        </span>
+            <div class="detail-primary-actions">
 
-        <form
-            action="/opportunities/{{ opportunity.id }}/pipeline/remove"
-            method="post"
-            class="inline-form"
-            onsubmit="return confirm('Remove this opportunity from the Pipeline?');"
-        >
-            <button
-                type="submit"
-                class="secondary-button"
-            >
-                Remove from Pipeline
-            </button>
-        </form>
-    {% else %}
-        <form
-            action="/opportunities/{{ opportunity.id }}/pipeline/add"
-            method="post"
-            class="inline-form"
-        >
-            <button
-                type="submit"
-                class="primary-button"
-            >
-                ⭐ Add to Pipeline
-            </button>
-        </form>
-              {% endif %}
-           </div>
+                {% if opportunity.source_url %}
+
+                <a href="{{ opportunity.source_url }}" target="_blank" rel="noopener noreferrer" class="
+                        primary-button
+                        detail-action-button
+                    ">
+                    Open original notice ↗
+                </a>
+
+                {% endif %}
+
+
+                {% if opportunity.is_lead %}
+
+                <a href="/pipeline" class="
+                        secondary-button
+                        detail-action-button
+                    ">
+                    View in pipeline
+                </a>
+
+
+                <form action="/opportunities/{{ opportunity.id }}/pipeline/remove" method="post"
+                    onsubmit="return confirm('Remove this opportunity from the pipeline?');">
+
+                    <button type="submit" class="
+                            ghost-button
+                            detail-action-button
+                        ">
+                        Remove from pipeline
+                    </button>
+
+                </form>
+
+                {% else %}
+
+                <form action="/opportunities/{{ opportunity.id }}/pipeline/add" method="post">
+
+                    <button type="submit" class="
+                            secondary-button
+                            detail-action-button
+                        ">
+                        Save to pipeline
+                    </button>
+
+                </form>
+
+                {% endif %}
+
+            </div>
+
         </section>
 
-        <section class="detail-grid">
-            <article class="content-panel">
-                <h3>Description</h3>
 
-                {% if opportunity.description %}
-                    <div class="description-text">
+        <div class="detail-layout">
+
+            <div class="detail-main-column">
+
+                <section class="detail-section-card">
+
+                    <div class="section-heading">
+
+                        <div>
+
+                            <p class="eyebrow">
+                                Opportunity
+                            </p>
+
+                            <h2>
+                                Description
+                            </h2>
+
+                        </div>
+
+                    </div>
+
+
+                    {% if opportunity.description %}
+
+                    <div class="description-text detail-description">
                         {{ opportunity.description }}
                     </div>
-                {% else %}
-                    <p class="muted-text">
-                        No description was extracted.
+
+                    {% else %}
+
+                    <div class="detail-empty-message">
+                        No description was extracted for this opportunity.
+                    </div>
+
+                    {% endif %}
+
+                </section>
+
+
+                {% if opportunity.match_reason %}
+
+                <section class="detail-section-card">
+
+                    <div class="section-heading">
+
+                        <div>
+
+                            <p class="eyebrow">
+                                Matching
+                            </p>
+
+                            <h2>
+                                Why this opportunity matched
+                            </h2>
+
+                        </div>
+
+                    </div>
+
+
+                    <p class="description-text match-explanation">
+                        {{ opportunity.match_reason }}
                     </p>
+
+                </section>
+
                 {% endif %}
-            </article>
 
-            <aside class="workflow-panel">
-                <h3>UT CPA Ltd Review</h3>
 
-                <form
-                    action="/opportunities/{{ opportunity.id }}/update"
-                    method="post"
-                >
-                    <div class="form-field">
-                        <label for="status">
-                            Opportunity status
-                        </label>
+                {% if opportunity.is_lead %}
 
-                        <select
-                            id="status"
-                            name="status"
-                            required
-                        >
-                            {% for status in statuses %}
-                                <option
-                                    value="{{ status }}"
-                                    {% if opportunity.status == status %}
-                                        selected
-                                    {% endif %}
-                                >
+                <section class="
+                        detail-section-card
+                        pipeline-detail-card
+                    ">
+
+                    <div class="
+                            section-heading
+                            pipeline-heading
+                        ">
+
+                        <div>
+
+                            <p class="eyebrow">
+                                Pipeline
+                            </p>
+
+                            <h2>
+                                Pursuit workspace
+                            </h2>
+
+                            <p class="section-subtitle">
+                                Track ownership, priority and the next action.
+                            </p>
+
+                        </div>
+
+
+                        <span class="
+                                badge
+                                pipeline-badge
+                            ">
+                            Active pursuit
+                        </span>
+
+                    </div>
+
+
+                    <form action="/opportunities/{{ opportunity.id }}/pipeline/update" method="post"
+                        class="pipeline-form">
+
+                        <div class="pipeline-form-grid">
+
+                            <div class="form-field">
+
+                                <label for="assigned_to">
+                                    Assigned to
+                                </label>
+
+                                <input id="assigned_to" name="assigned_to" type="text"
+                                    value="{{ opportunity.assigned_to or '' }}" placeholder="Team member responsible">
+
+                            </div>
+
+
+                            <div class="form-field">
+
+                                <label for="lead_priority">
+                                    Priority
+                                </label>
+
+                                <select id="lead_priority" name="lead_priority">
+
+                                    <option value="">
+                                        Select priority
+                                    </option>
+
+                                    {% for priority in lead_priorities %}
+
+                                    <option value="{{ priority }}" {% if opportunity.lead_priority==priority %} selected
+                                        {% endif %}>
+                                        {{ priority }}
+                                    </option>
+
+                                    {% endfor %}
+
+                                </select>
+
+                            </div>
+
+
+                            <div class="form-field">
+
+                                <label for="lead_status">
+                                    Pipeline stage
+                                </label>
+
+                                <select id="lead_status" name="lead_status">
+
+                                    <option value="">
+                                        Select stage
+                                    </option>
+
+                                    {% for lead_status in lead_statuses %}
+
+                                    <option value="{{ lead_status }}" {% if opportunity.lead_status==lead_status %}
+                                        selected {% endif %}>
+                                        {{ lead_status }}
+                                    </option>
+
+                                    {% endfor %}
+
+                                </select>
+
+                            </div>
+
+
+                            <div class="form-field">
+
+                                <label for="next_action_due">
+                                    Next action due
+                                </label>
+
+                                <input id="next_action_due" name="next_action_due" type="date"
+                                    value="{% if opportunity.next_action_due %}{{ opportunity.next_action_due.isoformat() }}{% endif %}">
+
+                            </div>
+
+
+                            <div class="form-field">
+
+                                <label for="last_follow_up_date">
+                                    Last follow-up
+                                </label>
+
+                                <input id="last_follow_up_date" name="last_follow_up_date" type="date"
+                                    value="{% if opportunity.last_follow_up_date %}{{ opportunity.last_follow_up_date.isoformat() }}{% endif %}">
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="form-field">
+
+                            <label for="next_action">
+                                Next action
+                            </label>
+
+                            <textarea id="next_action" name="next_action" rows="3"
+                                placeholder="Example: Request clarification, assign technical lead or prepare proposal outline.">{{ opportunity.next_action or "" }}</textarea>
+
+                        </div>
+
+
+                        <div class="form-field">
+
+                            <label for="lead_notes">
+                                Pipeline notes
+                            </label>
+
+                            <textarea id="lead_notes" name="lead_notes" rows="5"
+                                placeholder="Record follow-ups, decisions, risks and pursuit notes.">{{ opportunity.lead_notes or "" }}</textarea>
+
+                        </div>
+
+
+                        <div class="pipeline-save-row">
+
+                            <button type="submit" class="primary-button">
+                                Save pipeline details
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </section>
+
+                {% endif %}
+
+            </div>
+
+
+            <aside class="detail-sidebar">
+
+                <section class="
+                    detail-section-card
+                    sticky-review-card
+                ">
+
+                    <div class="section-heading">
+
+                        <div>
+
+                            <p class="eyebrow">
+                                Review
+                            </p>
+
+                            <h2>
+                                Opportunity decision
+                            </h2>
+
+                        </div>
+
+                    </div>
+
+
+                    <form action="/opportunities/{{ opportunity.id }}/update" method="post" class="review-form">
+
+                        <div class="form-field">
+
+                            <label for="status">
+                                Status
+                            </label>
+
+                            <select id="status" name="status" required>
+
+                                {% for status in statuses %}
+
+                                <option value="{{ status }}" {% if opportunity.status==status %} selected {% endif %}>
                                     {{ status }}
                                 </option>
-                            {% endfor %}
-                        </select>
+
+                                {% endfor %}
+
+                            </select>
+
+                        </div>
+
+
+                        <div class="form-field">
+
+                            <label for="user_notes">
+                                Internal notes
+                            </label>
+
+                            <textarea id="user_notes" name="user_notes" rows="8"
+                                placeholder="Add your assessment, concerns or decision notes.">{{ opportunity.user_notes or "" }}</textarea>
+
+                        </div>
+
+
+                        <button type="submit" class="
+                            primary-button
+                            full-width-button
+                        ">
+                            Save review
+                        </button>
+
+                    </form>
+
+                </section>
+
+
+                <section class="detail-section-card">
+
+                    <div class="section-heading">
+
+                        <div>
+
+                            <p class="eyebrow">
+                                Source activity
+                            </p>
+
+                            <h2>
+                                Record details
+                            </h2>
+
+                        </div>
+
                     </div>
 
-                    <div class="form-field">
-                        <label for="user_notes">
-                            Internal notes
-                        </label>
 
-                        <textarea
-                            id="user_notes"
-                            name="user_notes"
-                            rows="12"
-                            placeholder="Record your assessment, required consultants, proposal actions or reasons for not pursuing this opportunity."
-                        >{{ opportunity.user_notes or "" }}</textarea>
-                    </div>
+                    <dl class="record-detail-list">
 
-                    <button
-                        type="submit"
-                        class="primary-button full-width-button"
-                    >
-                        Save Review
-                    </button>
-                </form>
+                        <div>
+
+                            <dt>
+                                First discovered
+                            </dt>
+
+                            <dd>
+
+                                {% if opportunity.first_discovered_at %}
+
+                                {{
+                                opportunity.first_discovered_at.strftime(
+                                "%d %b %Y"
+                                )
+                                }}
+
+                                {% else %}
+
+                                Not recorded
+
+                                {% endif %}
+
+                            </dd>
+
+                        </div>
+
+
+                        <div>
+
+                            <dt>
+                                Last seen
+                            </dt>
+
+                            <dd>
+
+                                {% if opportunity.last_seen_at %}
+
+                                {{
+                                opportunity.last_seen_at.strftime(
+                                "%d %b %Y at %H:%M"
+                                )
+                                }}
+
+                                {% else %}
+
+                                Not recorded
+
+                                {% endif %}
+
+                            </dd>
+
+                        </div>
+
+
+                        <div>
+
+                            <dt>
+                                Source
+                            </dt>
+
+                            <dd>
+
+                                {{
+                                opportunity.source_name
+                                or "Not specified"
+                                }}
+
+                            </dd>
+
+                        </div>
+
+
+                        <div>
+
+                            <dt>
+                                Current status
+                            </dt>
+
+                            <dd>
+                                {{ opportunity.status }}
+                            </dd>
+
+                        </div>
+
+                    </dl>
+
+                </section>
+
             </aside>
-        </section>
-{% if opportunity.is_lead %}
-    <section class="content-panel pipeline-workspace">
-        <div class="pipeline-section-header">
-            <div>
-                <h3>Business Development Pipeline</h3>
 
-                <p class="muted-text">
-                    Assign responsibility and record the next follow-up action.
-                </p>
-            </div>
-
-            <span class="badge pipeline-badge">
-                ✓ In Pipeline
-            </span>
         </div>
 
-        <form
-            action="/opportunities/{{ opportunity.id }}/pipeline/update"
-            method="post"
-            class="pipeline-form"
-        >
-            <div class="pipeline-form-grid">
-                <div class="form-field">
-                    <label for="assigned_to">
-                        Assigned To
-                    </label>
-
-                    <input
-                        id="assigned_to"
-                        name="assigned_to"
-                        type="text"
-                        value="{{ opportunity.assigned_to or '' }}"
-                        placeholder="Employee responsible"
-                    >
-                </div>
-
-                <div class="form-field">
-                    <label for="lead_priority">
-                        Priority
-                    </label>
-
-                    <select
-                        id="lead_priority"
-                        name="lead_priority"
-                    >
-                        <option value="">
-                            Select priority
-                        </option>
-
-                        {% for priority in lead_priorities %}
-                            <option
-                                value="{{ priority }}"
-                                {% if opportunity.lead_priority == priority %}
-                                    selected
-                                {% endif %}
-                            >
-                                {{ priority }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="form-field">
-                    <label for="lead_status">
-                        Lead Status
-                    </label>
-
-                    <select
-                        id="lead_status"
-                        name="lead_status"
-                    >
-                        <option value="">
-                            Select status
-                        </option>
-
-                        {% for lead_status in lead_statuses %}
-                            <option
-                                value="{{ lead_status }}"
-                                {% if opportunity.lead_status == lead_status %}
-                                    selected
-                                {% endif %}
-                            >
-                                {{ lead_status }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="form-field">
-                    <label for="next_action_due">
-                        Next Action Due
-                    </label>
-
-                    <input
-                        id="next_action_due"
-                        name="next_action_due"
-                        type="date"
-                        value="{{
-                            opportunity.next_action_due.isoformat()
-                            if opportunity.next_action_due
-                            else ''
-                        }}"
-                    >
-                </div>
-
-                <div class="form-field">
-                    <label for="last_follow_up_date">
-                        Last Follow-up Date
-                    </label>
-
-                    <input
-                        id="last_follow_up_date"
-                        name="last_follow_up_date"
-                        type="date"
-                        value="{{
-                            opportunity.last_follow_up_date.isoformat()
-                            if opportunity.last_follow_up_date
-                            else ''
-                        }}"
-                    >
-                </div>
-            </div>
-
-            <div class="form-field">
-                <label for="next_action">
-                    Next Action
-                </label>
-
-                <textarea
-                    id="next_action"
-                    name="next_action"
-                    rows="3"
-                    placeholder="Example: Request clarification, identify consultants or prepare the technical proposal."
-                >{{ opportunity.next_action or "" }}</textarea>
-            </div>
-
-            <div class="form-field">
-                <label for="lead_notes">
-                    Pipeline Notes
-                </label>
-
-                <textarea
-                    id="lead_notes"
-                    name="lead_notes"
-                    rows="5"
-                    placeholder="Record follow-up notes and important decisions."
-                >{{ opportunity.lead_notes or "" }}</textarea>
-            </div>
-
-            <button
-                type="submit"
-                class="primary-button"
-            >
-                Save Pipeline Details
-            </button>
-        </form>
-    </section>
-{% endif %}
-        <section class="content-panel">
-            <h3>Classification explanation</h3>
-
-            {% if opportunity.match_reason %}
-                <p class="description-text">
-                    {{ opportunity.match_reason }}
-                </p>
-            {% else %}
-                <p class="muted-text">
-                    No classification explanation was recorded.
-                </p>
-            {% endif %}
-        </section>
     </main>
+
 </body>
+
 </html>

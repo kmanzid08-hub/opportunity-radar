@@ -7,7 +7,9 @@ from sqlalchemy import (
     Date,
     DateTime,
     Float,
+    ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
     func,
@@ -42,6 +44,213 @@ LEAD_PRIORITIES: tuple[str, ...] = (
     "High",
     "Urgent",
 )
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        index=True,
+    )
+
+    country: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True,
+    )
+
+    city: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
+    )
+
+    website: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    industry: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
+        index=True,
+    )
+
+    description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    default_language: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="en",
+        server_default="en",
+    )
+
+    timezone: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
+        index=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    opportunity_preferences: Mapped[
+        OpportunityPreference | None
+    ] = relationship(
+        "OpportunityPreference",
+        back_populates="organization",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class OpportunityPreference(Base):
+    __tablename__ = "opportunity_preferences"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "organizations.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+
+    countries: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+    )
+
+    regions: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+    )
+
+    industries: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+    )
+
+    services: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+    )
+
+    opportunity_types: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+    )
+
+    keywords: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+    )
+
+    languages: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+    )
+
+    minimum_match_score: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    include_no_deadline: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
+    )
+
+    include_jobs: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
+    )
+
+    include_tenders: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
+    )
+
+    include_grants: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
+    )
+
+    include_partnerships: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="1",
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    organization: Mapped[Organization] = relationship(
+        "Organization",
+        back_populates="opportunity_preferences",
+    )
 
 
 class Opportunity(Base):
@@ -373,8 +582,5 @@ class Source(Base):
 
 
 # Register relationship targets whenever the primary model module is loaded.
-# Several command-line entry points only query Source, but SQLAlchemy still
-# configures every mapper in this registry and must be able to resolve these
-# string relationship names.
 from app.lead_models import Lead as Lead  # noqa: E402
 from app.proposal_models import Proposal as Proposal  # noqa: E402

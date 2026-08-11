@@ -1,62 +1,154 @@
-DISCOVERY_QUERIES: list[str] = [
-    '"external audit services" Rwanda',
-    '"external audit" Rwanda tender',
-    '"audit firm" Rwanda request for proposal',
-    '"qualified audit firms" Rwanda',
-    '"statutory audit services" Rwanda',
-    '"internal audit services" Rwanda',
-    '"project audit" Rwanda request for proposal',
-    '"financial audit services" Rwanda',
+from __future__ import annotations
 
-    '"accounting firm" Rwanda tender',
-    '"accounting services" Rwanda request for proposal',
-    '"bookkeeping services" Rwanda',
-    '"financial reporting services" Rwanda',
-    '"IFRS consultancy" Rwanda',
-    '"IPSAS consultancy" Rwanda',
 
-    '"tax advisory services" Rwanda tender',
-    '"tax consultancy" Rwanda request for proposal',
-    '"tax compliance services" Rwanda',
+DISCOVERY_CATEGORIES: dict[str, tuple[str, ...]] = {
+    "general_procurement": (
+        '"procurement opportunities" {country}',
+        '"tender opportunities" {country}',
+    ),
 
-    '"recruitment firm" Rwanda tender',
-    '"recruitment services" Rwanda request for proposal',
-    '"human resources consultancy" Rwanda',
-    '"payroll services" Rwanda tender',
+    "ict_software": (
+        '"ICT services" tender {country}',
+        '"software development" RFP {country}',
+    ),
 
-    '"consulting firm" Rwanda expression of interest',
-    '"consultancy firm" Rwanda request for proposal',
-    '"professional services firm" Rwanda tender',
-    '"financial management services" Rwanda tender',
-    '"risk management consultancy" Rwanda',
-    '"governance consultancy" Rwanda',
-    '"due diligence" Rwanda consultancy',
-    '"capacity building" Rwanda consultancy',
-    '"institutional assessment" Rwanda consultancy',
+    "construction_infrastructure": (
+        '"construction works" tender {country}',
+        '"civil works" procurement {country}',
+    ),
 
-    '"request for proposal" Rwanda consulting firm',
-    '"expression of interest" Rwanda professional services',
-    '"request for quotation" Rwanda consultancy',
-    '"terms of reference" Rwanda consulting firm',
-    '"qualified firms" Rwanda proposals',
-    '"framework agreement" Rwanda consultancy',
-    '"prequalification of service providers" Rwanda',
+    "engineering": (
+        '"engineering services" tender {country}',
+        '"engineering consultancy" RFP {country}',
+    ),
 
-    'site:.rw tender consultancy',
-    'site:.rw procurement opportunities',
-    'site:.rw "request for proposal"',
-    'site:.rw "expression of interest"',
-    'site:.rw "terms of reference" consultancy',
-    'site:.rw "qualified firms" proposals',
-    'site:.rw "audit services"',
-    'site:.rw "accounting services"',
-    'site:.rw "recruitment services"',
+    "energy": (
+        '"renewable energy" tender {country}',
+        '"electrical works" procurement {country}',
+    ),
 
-    'site:.org.rw request for proposal',
-    'site:.org.rw tender consultancy',
-    'site:.org.rw external audit',
-    'site:.co.rw tender services',
-    'site:.co.rw procurement opportunities',
-    'site:.gov.rw tender consultancy',
-    'site:.gov.rw request for proposal',
-]
+    "healthcare": (
+        '"medical equipment" tender {country}',
+        '"health services" procurement {country}',
+    ),
+
+    "agriculture": (
+        '"agricultural services" tender {country}',
+        '"agricultural inputs" procurement {country}',
+    ),
+
+    "logistics_transport": (
+        '"logistics services" tender {country}',
+        '"transport services" procurement {country}',
+    ),
+
+    "equipment_supplies": (
+        '"supply of equipment" tender {country}',
+        '"supply of goods" procurement {country}',
+    ),
+
+    "professional_services": (
+        '"consultancy services" tender {country}',
+        '"professional services" RFP {country}',
+    ),
+
+    "finance_audit_tax": (
+        '"audit services" tender {country}',
+        '"financial services" RFP {country}',
+    ),
+
+    "training_education": (
+        '"training services" tender {country}',
+        '"capacity building" RFP {country}',
+    ),
+
+    "research_evaluation": (
+        '"research services" tender {country}',
+        '"monitoring and evaluation" RFP {country}',
+    ),
+
+    "marketing_communications": (
+        '"communications services" tender {country}',
+        '"marketing services" RFP {country}',
+    ),
+
+    "environmental": (
+        '"environmental services" tender {country}',
+        '"environmental impact assessment" RFP {country}',
+    ),
+
+    "security_facilities": (
+        '"security services" tender {country}',
+        '"facility management" procurement {country}',
+    ),
+}
+
+
+def build_discovery_queries(
+    country: str,
+) -> list[str]:
+    """
+    Build broad opportunity-source discovery queries
+    for a target country.
+
+    Country is runtime data rather than an architectural
+    assumption of the discovery engine.
+    """
+
+    clean_country = country.strip()
+
+    if not clean_country:
+        raise ValueError(
+            "country is required"
+        )
+
+    queries: list[str] = []
+
+    for query_templates in DISCOVERY_CATEGORIES.values():
+        for query_template in query_templates:
+            queries.append(
+                query_template.format(
+                    country=clean_country,
+                )
+            )
+
+    return queries
+
+
+def build_category_queries(
+    country: str,
+) -> dict[str, list[str]]:
+    """
+    Return queries grouped by discovery category.
+
+    This is useful for discovery metrics and logging.
+    """
+
+    clean_country = country.strip()
+
+    if not clean_country:
+        raise ValueError(
+            "country is required"
+        )
+
+    return {
+        category: [
+            template.format(
+                country=clean_country,
+            )
+            for template in templates
+        ]
+        for category, templates
+        in DISCOVERY_CATEGORIES.items()
+    }
+
+
+# Backward compatibility with the existing discovery runner.
+#
+# The application can later replace this default with the
+# active organization's countries.
+DISCOVERY_QUERIES: list[str] = (
+    build_discovery_queries(
+        "Rwanda"
+    )
+)

@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>
+        Business Profile | Opportunity Radar
+    </title>
+
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=4">
+</head>
+
+<body>
+
+    <header class="app-header">
+
+        <div class="app-header-inner">
+
+            <a href="/" class="brand">
+                <span class="brand-mark">
+                    OR
+                </span>
+
+                <span>
+                    <strong>
+                        Opportunity Radar
+                    </strong>
+
+                    <small>
+                        Business opportunity intelligence
+                    </small>
+                </span>
+            </a>
+
+
+            <div class="topbar-actions">
+
+                <nav class="main-nav" aria-label="Primary navigation">
+                    <a href="/" class="nav-link">
+                        Discover
+                    </a>
+
+                    <a href="/pipeline" class="nav-link">
+                        Pipeline
+                    </a>
+
+                    <a href="/?deadline_filter=archived" class="nav-link">
+                        Archived
+                    </a>
+
+                    <a href="/business-profile" class="nav-link active">
+                        Business Profile
+                    </a>
+                </nav>
+
+            </div>
+
+        </div>
+
+    </header>
+
+
+    <main class="discover-shell profile-page-shell">
+
+        <section class="profile-hero">
+
+            <div>
+
+                <p class="eyebrow">
+                    Workspace setup
+                </p>
+
+                <h1>
+                    Tell Opportunity Radar what your business does.
+                </h1>
+
+                <p class="hero-copy">
+                    Your business profile and preferences will eventually
+                    drive opportunity matching, discovery, ranking and alerts.
+                </p>
+
+            </div>
+
+        </section>
+
+
+        {% if request.query_params.get("saved") %}
+
+        <div class="profile-success-message">
+            Business profile saved successfully.
+        </div>
+
+        {% endif %}
+
+
+        <form method="post" action="/business-profile" class="business-profile-form">
+
+            <!-- ================================
+             ORGANIZATION
+        ================================= -->
+
+            <section class="profile-section">
+
+                <div class="profile-section-heading">
+
+                    <div>
+                        <p class="eyebrow">
+                            Organization
+                        </p>
+
+                        <h2>
+                            Business details
+                        </h2>
+
+                        <p>
+                            Basic information about the organization
+                            using this workspace.
+                        </p>
+                    </div>
+
+                </div>
+
+
+                <div class="profile-form-grid">
+
+                    <label class="profile-field profile-field-wide">
+
+                        <span>
+                            Organization name *
+                        </span>
+
+                        <input type="text" name="name" required value="{{ organization.name if organization else '' }}"
+                            placeholder="Example: Acme Consulting Ltd">
+
+                    </label>
+
+
+                    <label class="profile-field">
+
+                        <span>
+                            Home country
+                        </span>
+
+                        <input type="text" name="country"
+                            value="{{ organization.country or '' if organization else '' }}"
+                            placeholder="Example: Rwanda">
+
+                    </label>
+
+
+                    <label class="profile-field">
+
+                        <span>
+                            City
+                        </span>
+
+                        <input type="text" name="city" value="{{ organization.city or '' if organization else '' }}"
+                            placeholder="Example: Kigali">
+
+                    </label>
+
+
+                    <label class="profile-field">
+
+                        <span>
+                            Industry
+                        </span>
+
+                        <input type="text" name="industry"
+                            value="{{ organization.industry or '' if organization else '' }}"
+                            placeholder="Example: Professional Services">
+
+                    </label>
+
+
+                    <label class="profile-field">
+
+                        <span>
+                            Website
+                        </span>
+
+                        <input type="url" name="website"
+                            value="{{ organization.website or '' if organization else '' }}"
+                            placeholder="https://example.com">
+
+                    </label>
+
+
+                    <label class="profile-field">
+
+                        <span>
+                            Default language
+                        </span>
+
+                        <input type="text" name="default_language"
+                            value="{{ organization.default_language if organization else 'en' }}" placeholder="en">
+
+                    </label>
+
+
+                    <label class="profile-field">
+
+                        <span>
+                            Timezone
+                        </span>
+
+                        <input type="text" name="timezone"
+                            value="{{ organization.timezone or '' if organization else '' }}"
+                            placeholder="Example: Africa/Kigali">
+
+                    </label>
+
+
+                    <label class="profile-field profile-field-full">
+
+                        <span>
+                            Business description
+                        </span>
+
+                        <textarea name="description" rows="4"
+                            placeholder="Describe what your organization does and the types of clients or markets you serve.">{{ organization.description or '' if organization else '' }}</textarea>
+
+                    </label>
+
+                </div>
+
+            </section>
+
+
+            <!-- ================================
+             GEOGRAPHY
+        ================================= -->
+
+            <section class="profile-section">
+
+                <div class="profile-section-heading">
+
+                    <div>
+                        <p class="eyebrow">
+                            Geography
+                        </p>
+
+                        <h2>
+                            Where do you want opportunities?
+                        </h2>
+
+                        <p>
+                            You can target one country, many countries,
+                            regions or international opportunities.
+                        </p>
+                    </div>
+
+                </div>
+
+
+                <div class="profile-form-grid">
+
+                    <label class="profile-field">
+
+                        <span>
+                            Countries
+                        </span>
+
+                        <input type="text" name="countries"
+                            value="{{ preference.countries | join(', ') if preference else '' }}"
+                            placeholder="Rwanda, Kenya, Uganda">
+
+                        <small>
+                            Separate multiple countries with commas.
+                        </small>
+
+                    </label>
+
+
+                    <label class="profile-field">
+
+                        <span>
+                            Regions
+                        </span>
+
+                        <input type="text" name="regions"
+                            value="{{ preference.regions | join(', ') if preference else '' }}"
+                            placeholder="East Africa, Africa, Global">
+
+                    </label>
+
+                </div>
+
+            </section>
+
+
+            <!-- ================================
+             BUSINESS CAPABILITIES
+        ================================= -->
+
+            <section class="profile-section">
+
+                <div class="profile-section-heading">
+
+                    <div>
+
+                        <p class="eyebrow">
+                            Capabilities
+                        </p>
+
+                        <h2>
+                            What does your business sell or provide?
+                        </h2>
+
+                        <p>
+                            These signals will become part of the
+                            opportunity matching engine.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <div class="profile-form-grid">
+
+                    <label class="profile-field profile-field-wide">
+
+                        <span>
+                            Industries
+                        </span>
+
+                        <input type="text" name="industries"
+                            value="{{ preference.industries | join(', ') if preference else '' }}"
+                            placeholder="Construction, Healthcare, Finance, ICT">
+
+                    </label>
+
+
+                    <label class="profile-field profile-field-wide">
+
+                        <span>
+                            Services and capabilities
+                        </span>
+
+                        <input type="text" name="services"
+                            value="{{ preference.services | join(', ') if preference else '' }}"
+                            placeholder="Audit, software development, engineering, training">
+
+                    </label>
+
+
+                    <label class="profile-field profile-field-full">
+
+                        <span>
+                            Keywords
+                        </span>
+
+                        <input type="text" name="keywords"
+                            value="{{ preference.keywords | join(', ') if preference else '' }}"
+                            placeholder="financial audit, cybersecurity, road construction, procurement">
+
+                        <small>
+                            Add specific terms that indicate a strong opportunity match.
+                        </small>
+
+                    </label>
+
+                </div>
+
+            </section>
+
+
+            <!-- ================================
+             OPPORTUNITY TYPES
+        ================================= -->
+
+            <section class="profile-section">
+
+                <div class="profile-section-heading">
+
+                    <div>
+
+                        <p class="eyebrow">
+                            Opportunity types
+                        </p>
+
+                        <h2>
+                            What should Opportunity Radar look for?
+                        </h2>
+
+                    </div>
+
+                </div>
+
+
+                <label class="profile-field profile-field-full">
+
+                    <span>
+                        Opportunity types
+                    </span>
+
+                    <input type="text" name="opportunity_types"
+                        value="{{ preference.opportunity_types | join(', ') if preference else '' }}"
+                        placeholder="Tender, RFP, RFQ, EOI, Grant, Partnership, Job, Supplier Registration">
+
+                </label>
+
+
+                <div class="profile-checkbox-grid">
+
+                    <label class="profile-checkbox">
+
+                        <input type="checkbox" name="include_tenders" {% if not preference or preference.include_tenders
+                            %} checked {% endif %}>
+
+                        <span>
+                            <strong>
+                                Tenders & procurement
+                            </strong>
+
+                            <small>
+                                Tenders, bids, RFPs, RFQs and EOIs.
+                            </small>
+                        </span>
+
+                    </label>
+
+
+                    <label class="profile-checkbox">
+
+                        <input type="checkbox" name="include_grants" {% if not preference or preference.include_grants
+                            %} checked {% endif %}>
+
+                        <span>
+                            <strong>
+                                Grants
+                            </strong>
+
+                            <small>
+                                Funding and grant opportunities.
+                            </small>
+                        </span>
+
+                    </label>
+
+
+                    <label class="profile-checkbox">
+
+                        <input type="checkbox" name="include_jobs" {% if not preference or preference.include_jobs %}
+                            checked {% endif %}>
+
+                        <span>
+                            <strong>
+                                Jobs & consultancies
+                            </strong>
+
+                            <small>
+                                Roles and consulting assignments.
+                            </small>
+                        </span>
+
+                    </label>
+
+
+                    <label class="profile-checkbox">
+
+                        <input type="checkbox" name="include_partnerships" {% if not preference or
+                            preference.include_partnerships %} checked {% endif %}>
+
+                        <span>
+                            <strong>
+                                Partnerships
+                            </strong>
+
+                            <small>
+                                Partnerships and collaboration opportunities.
+                            </small>
+                        </span>
+
+                    </label>
+
+                </div>
+
+            </section>
+
+
+            <!-- ================================
+             MATCHING
+        ================================= -->
+
+            <section class="profile-section">
+
+                <div class="profile-section-heading">
+
+                    <div>
+
+                        <p class="eyebrow">
+                            Matching
+                        </p>
+
+                        <h2>
+                            Opportunity matching preferences
+                        </h2>
+
+                    </div>
+
+                </div>
+
+
+                <div class="profile-form-grid">
+
+                    <label class="profile-field">
+
+                        <span>
+                            Minimum match score
+                        </span>
+
+                        <input type="number" name="minimum_match_score" min="0" max="100"
+                            value="{{ preference.minimum_match_score if preference else 0 }}">
+
+                        <small>
+                            0 shows everything. Higher values make the inbox stricter.
+                        </small>
+
+                    </label>
+
+
+                    <label class="profile-field">
+
+                        <span>
+                            Languages
+                        </span>
+
+                        <input type="text" name="languages"
+                            value="{{ preference.languages | join(', ') if preference else '' }}"
+                            placeholder="English, French, Kinyarwanda">
+
+                    </label>
+
+                </div>
+
+
+                <label class="profile-checkbox profile-checkbox-inline">
+
+                    <input type="checkbox" name="include_no_deadline" {% if not preference or
+                        preference.include_no_deadline %} checked {% endif %}>
+
+                    <span>
+                        <strong>
+                            Include opportunities without a published deadline
+                        </strong>
+
+                        <small>
+                            These opportunities remain subject to the inbox aging policy.
+                        </small>
+                    </span>
+
+                </label>
+
+            </section>
+
+
+            <!-- ================================
+             SAVE
+        ================================= -->
+
+            <div class="profile-save-bar">
+
+                <div>
+
+                    <strong>
+                        Ready to personalize Opportunity Radar?
+                    </strong>
+
+                    <p>
+                        Save your profile now. Matching integration comes next.
+                    </p>
+
+                </div>
+
+                <button type="submit" class="primary-button profile-save-button">
+                    Save business profile
+                </button>
+
+            </div>
+
+        </form>
+
+    </main>
+
+</body>
+
+</html>

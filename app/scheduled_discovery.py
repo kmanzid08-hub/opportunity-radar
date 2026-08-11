@@ -10,7 +10,7 @@ from app.database import engine
 from app.source_discovery import run_source_discovery
 
 JOB_NAME = "website_discovery"
-INTERVAL = timedelta(days=5)
+INTERVAL = timedelta(days=1)
 FORCE_SETTING = "FORCE_WEBSITE_DISCOVERY"
 
 

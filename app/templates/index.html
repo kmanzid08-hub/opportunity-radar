@@ -1,619 +1,963 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>Opportunity Radar</title>
 
-    <link
-        rel="stylesheet"
-        href="{{ url_for('static', path='/style.css') }}"
-    >
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=5">
 </head>
 
 <body>
-    <header class="main-header">
-        <div class="header-content">
-            <div>
-                <h1>Opportunity Radar</h1>
 
-                <p>
-                    Professional services opportunity monitoring
-                    for UT CPA Ltd
-                </p>
-            </div>
+    <header class="app-header">
 
-            <div class="header-actions">
-                <nav class="header-navigation">
-                    <a
-                        href="/"
-                        class="header-button active-header-button"
-                    >
-                        Dashboard
+        <div class="app-header-inner">
+
+            <a class="brand" href="/">
+                <span class="brand-mark">
+                    OR
+                </span>
+
+                <span>
+                    <strong>
+                        Opportunity Radar
+                    </strong>
+
+                    <small>
+                        Business opportunity intelligence
+                    </small>
+                </span>
+            </a>
+
+
+            <div class="topbar-actions">
+
+                <nav class="main-nav" aria-label="Primary navigation">
+                    <a href="/" class="nav-link active">
+                        Discover
                     </a>
 
-                    <a
-                        href="/pipeline"
-                        class="header-button"
-                    >
+                    <a href="/pipeline" class="nav-link">
                         Pipeline
+                    </a>
+
+                    <a href="/?deadline_filter=archived" class="nav-link">
+                        Archived
+                    </a>
+
+                    <a href="/business-profile" class="nav-link">
+                        Business Profile
                     </a>
                 </nav>
 
-                <form
-                    action="/scan"
-                    method="post"
-                >
-                    <button
-                        type="submit"
-                        class="primary-button"
-                    >
-                        Scan for Opportunities
+
+                <form action="/scan" method="post">
+                    <button type="submit" class="scan-button">
+                        Run scan
                     </button>
                 </form>
+
             </div>
+
         </div>
+
     </header>
 
-    <main class="page-container">
 
-        <section class="summary-grid">
+    <main class="discover-shell">
 
-            <div class="summary-card">
-                <span class="summary-label">
-                    New Today
+        <section class="discover-hero">
+
+            <div>
+
+                <p class="eyebrow">
+                    Opportunity discovery
+                </p>
+
+                <h1>
+                    Find opportunities worth pursuing.
+                </h1>
+
+                <p class="hero-copy">
+                    Search, evaluate and move the best
+                    opportunities into your pipeline.
+                </p>
+
+            </div>
+
+
+            <div class="hero-side">
+
+                <span class="live-dot"></span>
+
+                <span>
+                    {{ dashboard_metrics.sources_scanned_today }}
+                    sources scanned today
+                </span>
+
+            </div>
+
+        </section>
+
+
+        {% if business_profile_active %}
+
+        <section class="operations-strip">
+
+            <div>
+
+                <span>
+                    Personalized for
+                </span>
+
+                <strong>
+                    {{ business_profile_name }}
+                </strong>
+
+            </div>
+
+
+            <div>
+
+                <span>
+                    Minimum match
+                </span>
+
+                <strong>
+                    {{ business_minimum_match_score }}
+                </strong>
+
+            </div>
+
+
+            <div>
+
+                <a href="/business-profile" class="source-link">
+                    Edit business profile →
+                </a>
+
+            </div>
+
+        </section>
+
+        {% else %}
+
+        <section class="operations-strip">
+
+            <div>
+
+                <span>
+                    Matching mode
+                </span>
+
+                <strong>
+                    Global
+                </strong>
+
+            </div>
+
+
+            <div>
+
+                <a href="/business-profile" class="source-link">
+                    Create a Business Profile
+                    to personalize opportunities →
+                </a>
+
+            </div>
+
+        </section>
+
+        {% endif %}
+
+
+        <section class="primary-metrics" aria-label="Opportunity metrics">
+
+            <div class="metric-card">
+
+                <span class="metric-label">
+                    New today
                 </span>
 
                 <strong>
                     {{ dashboard_metrics.new_today }}
                 </strong>
-            </div>
 
-            <div class="summary-card">
-                <span class="summary-label">
-                    New This Week
+                <span class="metric-note">
+                    {{ dashboard_metrics.new_this_week }}
+                    this week
                 </span>
 
-                <strong>
-                    {{ dashboard_metrics.new_this_week }}
-                </strong>
             </div>
 
-            <a
-                href="/"
-                class="summary-card"
-            >
-                <span class="summary-label">
-                    Active
+
+            <a href="/" class="metric-card metric-card-link">
+
+                <span class="metric-label">
+                    Active opportunities
                 </span>
 
                 <strong>
                     {{ dashboard_metrics.active }}
                 </strong>
+
+                <span class="metric-note">
+
+                    {% if business_profile_active %}
+
+                    Matched to your business
+
+                    {% else %}
+
+                    Available in your inbox
+
+                    {% endif %}
+
+                </span>
+
             </a>
 
-            <a
-                href="/?deadline_filter=due_7_days"
-                class="summary-card"
-            >
-                <span class="summary-label">
-                    Expiring Soon
+
+            <a href="/?deadline_filter=due_7_days" class="metric-card metric-card-link">
+
+                <span class="metric-label">
+                    Expiring soon
                 </span>
 
                 <strong>
                     {{ dashboard_metrics.expiring_soon }}
                 </strong>
-            </a>
 
-            <a
-                href="/?deadline_filter=expired"
-                class="summary-card"
-            >
-                <span class="summary-label">
-                    Expired
+                <span class="metric-note">
+                    Due within 7 days
                 </span>
 
-                <strong>
-                    {{ dashboard_metrics.expired }}
-                </strong>
             </a>
 
-            <a
-                href="/?deadline_filter=archived"
-                class="summary-card"
-            >
-                <span class="summary-label">
-                    Archived
-                </span>
 
-                <strong>
-                    {{ dashboard_metrics.archived }}
-                </strong>
-            </a>
+            <a href="/pipeline" class="metric-card metric-card-link">
 
-            <a
-                href="/pipeline"
-                class="summary-card"
-            >
-                <span class="summary-label">
+                <span class="metric-label">
                     Pipeline
                 </span>
 
                 <strong>
                     {{ dashboard_metrics.pipeline }}
                 </strong>
-            </a>
 
-            <div class="summary-card">
-                <span class="summary-label">
-                    Sources Scanned Today
+                <span class="metric-note">
+                    Opportunities being pursued
                 </span>
 
-                <strong>
-                    {{ dashboard_metrics.sources_scanned_today }}
-                </strong>
-            </div>
+            </a>
 
-            <div class="summary-card">
-                <span class="summary-label">
-                    Sources Discovered Today
+        </section>
+
+
+        <section class="operations-strip" aria-label="System activity">
+
+            <div>
+
+                <span>
+                    Sources discovered today
                 </span>
 
                 <strong>
                     {{ dashboard_metrics.sources_discovered_today }}
                 </strong>
+
             </div>
 
-            <div class="summary-card">
-                <span class="summary-label">
-                    Scan Success Rate
+
+            <div>
+
+                <span>
+                    Sources scanned today
+                </span>
+
+                <strong>
+                    {{ dashboard_metrics.sources_scanned_today }}
+                </strong>
+
+            </div>
+
+
+            <div>
+
+                <span>
+                    Scan success
                 </span>
 
                 <strong>
                     {{ dashboard_metrics.scan_success_rate }}%
                 </strong>
+
+            </div>
+
+
+            <div>
+
+                <span>
+                    Archived
+                </span>
+
+                <strong>
+                    {{ dashboard_metrics.archived }}
+                </strong>
+
+            </div>
+
+
+            <div>
+
+                <span>
+                    Expired
+                </span>
+
+                <strong>
+                    {{ dashboard_metrics.expired }}
+                </strong>
+
             </div>
 
         </section>
 
-        <section class="filter-panel">
-            <form
-                action="/"
-                method="get"
-                class="filter-form"
-            >
-                <div class="form-field search-field">
+
+        <section class="discovery-toolbar">
+
+            <form action="/" method="get" class="discover-filter-form">
+
+                <div class="search-control">
+
                     <label for="q">
-                        Search
+                        Search opportunities
                     </label>
 
-                    <input
-                        id="q"
-                        type="search"
-                        name="q"
-                        value="{{ selected_q }}"
-                        placeholder="Title, organisation or keyword"
-                    >
+                    <div class="search-input-wrap">
+
+                        <span class="search-icon" aria-hidden="true">
+                            ⌕
+                        </span>
+
+                        <input id="q" type="search" name="q" value="{{ selected_q }}"
+                            placeholder="Search title, organisation, service or keyword">
+
+                    </div>
+
                 </div>
 
-                <div class="form-field">
+
+                <div class="compact-filter">
+
                     <label for="category">
                         Category
                     </label>
 
-                    <select
-                        id="category"
-                        name="category"
-                    >
+                    <select id="category" name="category">
+
                         <option value="">
                             All categories
                         </option>
 
+
                         {% for category in categories %}
-                            <option
-                                value="{{ category }}"
-                                {% if selected_category == category %}
-                                    selected
-                                {% endif %}
-                            >
-                                {{ category }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
 
-                <div class="form-field">
-                    <label for="status">
-                        Status
-                    </label>
-
-                    <select
-                        id="status"
-                        name="status"
-                    >
-                        <option value="">
-                            All statuses
+                        <option value="{{ category }}" {% if selected_category==category %} selected {% endif %}>
+                            {{ category }}
                         </option>
 
-                        {% for status in statuses %}
-                            <option
-                                value="{{ status }}"
-                                {% if selected_status == status %}
-                                    selected
-                                {% endif %}
-                            >
-                                {{ status }}
-                            </option>
                         {% endfor %}
+
                     </select>
+
                 </div>
 
-                <div class="form-field">
+
+                <div class="compact-filter">
+
                     <label for="deadline_filter">
                         Deadline
                     </label>
 
-                    <select
-                        id="deadline_filter"
-                        name="deadline_filter"
-                    >
+                    <select id="deadline_filter" name="deadline_filter">
+
                         <option value="">
                             All deadlines
                         </option>
 
-                        <option
-                            value="open"
-                            {% if selected_deadline == "open" %}
-                                selected
-                            {% endif %}
-                        >
-                            Open opportunities
+                        <option value="open" {% if selected_deadline=="open" %} selected {% endif %}>
+                            Open
                         </option>
 
-                        <option
-                            value="due_7_days"
-                            {% if selected_deadline == "due_7_days" %}
-                                selected
-                            {% endif %}
-                        >
-                            Due within 7 days
+                        <option value="due_7_days" {% if selected_deadline=="due_7_days" %} selected {% endif %}>
+                            Due in 7 days
                         </option>
 
-                        <option
-                            value="due_30_days"
-                            {% if selected_deadline == "due_30_days" %}
-                                selected
-                            {% endif %}
-                        >
-                            Due within 30 days
+                        <option value="due_30_days" {% if selected_deadline=="due_30_days" %} selected {% endif %}>
+                            Due in 30 days
                         </option>
 
-                        <option
-                            value="no_deadline"
-                            {% if selected_deadline == "no_deadline" %}
-                                selected
-                            {% endif %}
-                        >
-                            Deadline not identified (active)
+                        <option value="no_deadline" {% if selected_deadline=="no_deadline" %} selected {% endif %}>
+                            No deadline
                         </option>
 
-                        <option
-                            value="archived"
-                            {% if selected_deadline == "archived" %}
-                                selected
-                            {% endif %}
-                        >
-                            Archived opportunities
+                        <option value="archived" {% if selected_deadline=="archived" %} selected {% endif %}>
+                            Archived
                         </option>
 
-                        <option
-                            value="expired"
-                            {% if selected_deadline == "expired" %}
-                                selected
-                            {% endif %}
-                        >
+                        <option value="expired" {% if selected_deadline=="expired" %} selected {% endif %}>
                             Expired
                         </option>
+
                     </select>
+
                 </div>
 
-                <div class="filter-actions">
-                    <button
-                        type="submit"
-                        class="primary-button"
-                    >
-                        Apply Filters
+
+                <div class="compact-filter">
+
+                    <label for="status">
+                        Status
+                    </label>
+
+                    <select id="status" name="status">
+
+                        <option value="">
+                            All statuses
+                        </option>
+
+
+                        {% for status in statuses %}
+
+                        <option value="{{ status }}" {% if selected_status==status %} selected {% endif %}>
+                            {{ status }}
+                        </option>
+
+                        {% endfor %}
+
+                    </select>
+
+                </div>
+
+
+                <div class="discover-filter-actions">
+
+                    <button type="submit" class="primary-button">
+                        Apply
                     </button>
 
-                    <a
-                        href="/"
-                        class="secondary-button"
-                    >
+                    <a href="/" class="ghost-button">
                         Clear
                     </a>
+
                 </div>
+
             </form>
+
         </section>
 
-        <section class="results-header">
+
+        <section class="results-toolbar">
+
             <div>
-                <h2>Opportunities</h2>
 
-                <p>
+                <p class="eyebrow">
+
                     {% if selected_deadline == "archived" %}
-                        Showing {{ filtered_count }} of
-                        {{ filtered_total }} archived
-                        opportunities
+
+                    Archive
+
+                    {% elif business_profile_active %}
+
+                    Personalized discover
+
                     {% else %}
-                        Showing {{ filtered_count }} of
-                        {{ filtered_total }} matching;
-                        {{ total_opportunities }} total inbox
-                        opportunities
+
+                    Discover
+
                     {% endif %}
+
                 </p>
 
-                <p class="muted-text">
-                    Opportunities without a deadline leave the inbox after
-                    {{ inbox_no_deadline_max_age_days }} days unless refreshed.
-                    Pipeline opportunities are always retained.
+
+                <div class="results-title-row">
+
+                    <h2>
+
+                        {% if selected_deadline == "archived" %}
+
+                        Archived opportunities
+
+                        {% else %}
+
+                        Opportunities
+
+                        {% endif %}
+
+                    </h2>
+
+
+                    <span class="results-count">
+                        {{ filtered_total }}
+                    </span>
+
+                </div>
+
+
+                <p class="results-description">
+
+                    {% if selected_deadline == "archived" %}
+
+                    Showing
+                    {{ filtered_count }}
+                    on this page.
+
+                    {% elif business_profile_active %}
+
+                    Showing
+                    {{ filtered_count }}
+                    on this page from
+                    {{ total_opportunities }}
+                    opportunities matched to
+                    {{ business_profile_name }}.
+
+                    {% else %}
+
+                    Showing
+                    {{ filtered_count }}
+                    on this page from
+                    {{ total_opportunities }}
+                    active inbox opportunities.
+
+                    {% endif %}
+
                 </p>
+
             </div>
+
+
+            {% if
+            selected_q
+            or selected_category
+            or selected_status
+            or selected_deadline
+            %}
+
+            <div class="active-filter-indicator">
+                Filters active
+            </div>
+
+            {% endif %}
+
         </section>
+
 
         {% if opportunities %}
 
-            <section class="opportunity-list">
+        <section class="opportunity-feed">
 
-                {% for opportunity in opportunities %}
+            {% for opportunity in opportunities %}
 
-                    <article
-                        class="
-                            opportunity-card
-                            {% if opportunity.is_expired %}
-                                expired-card
+            {% set display_score =
+            opportunity.display_match_score
+            if opportunity.display_match_score is defined
+            else opportunity.match_score
+            %}
+
+
+            <article class="
+                        discover-card
+                        {% if opportunity.is_expired %}
+                            discover-card-expired
+                        {% endif %}
+                    ">
+
+                <div class="score-column">
+
+                    {% if display_score is not none %}
+
+                    <div class="
+                                    match-score
+
+                                    {% if display_score >= 70 %}
+                                        match-score-high
+
+                                    {% elif display_score >= 45 %}
+                                        match-score-medium
+
+                                    {% else %}
+                                        match-score-low
+                                    {% endif %}
+                                " title="{{
+                                    opportunity.display_match_reason
+                                    if opportunity.display_match_reason is defined
+                                    else opportunity.match_reason
+                                }}">
+
+                        <strong>
+                            {{ display_score }}
+                        </strong>
+
+                        <span>
+
+                            {% if business_profile_active %}
+                            profile
+                            {% else %}
+                            match
                             {% endif %}
-                        "
-                    >
-                        <div class="opportunity-main">
 
-                            <div class="badge-row">
+                        </span>
 
-                                <span
-                                    class="
+                    </div>
+
+
+                    {% else %}
+
+                    <div class="
+                                    match-score
+                                    match-score-unscored
+                                ">
+
+                        <strong>
+                            —
+                        </strong>
+
+                        <span>
+                            match
+                        </span>
+
+                    </div>
+
+                    {% endif %}
+
+                </div>
+
+
+                <div class="discover-card-main">
+
+                    <div class="badge-row compact-badges">
+
+                        <span class="
+                                    badge
+                                    category-badge
+                                ">
+                            {{
+                            opportunity.category
+                            or "Uncategorised"
+                            }}
+                        </span>
+
+
+                        {% if opportunity.status == "New" %}
+
+                        <span class="
                                         badge
-                                        category-badge
-                                    "
-                                >
-                                    {{
-                                        opportunity.category
-                                        or "Uncategorised"
-                                    }}
-                                </span>
+                                        status-new
+                                    ">
+                            New
+                        </span>
 
-                                <span
-                                    class="
+                        {% endif %}
+
+
+                        {% if opportunity.is_lead %}
+
+                        <span class="
                                         badge
-                                        status-badge
-                                        status-{{ opportunity.status|lower }}
-                                    "
-                                >
-                                    {{ opportunity.status }}
-                                </span>
+                                        pipeline-badge
+                                    ">
+                            In pipeline
+                        </span>
 
-                                {% if opportunity.is_lead %}
-                                    <span
-                                        class="
-                                            badge
-                                            pipeline-badge
-                                        "
-                                    >
-                                        In Pipeline
-                                    </span>
-                                {% endif %}
+                        {% endif %}
 
-                                {% if opportunity.is_expired %}
-                                    <span
-                                        class="
-                                            badge
-                                            expired-badge
-                                        "
-                                    >
-                                        Deadline passed
-                                    </span>
-                                {% endif %}
 
-                            </div>
+                        {% if opportunity.is_expired %}
 
-                            <h3>
-                                <a
-                                    href="/opportunities/{{ opportunity.id }}"
-                                >
-                                    {{ opportunity.title }}
-                                </a>
-                            </h3>
+                        <span class="
+                                        badge
+                                        expired-badge
+                                    ">
+                            Expired
+                        </span>
 
-                            <p class="organisation-name">
+                        {% endif %}
+
+                    </div>
+
+
+                    <h3 class="discover-title">
+
+                        <a href="/opportunities/{{ opportunity.id }}">
+                            {{ opportunity.title }}
+                        </a>
+
+                    </h3>
+
+
+                    <p class="discover-organisation">
+
+                        {{
+                        opportunity.organisation_name
+                        or "Organisation not specified"
+                        }}
+
+                    </p>
+
+
+                    <div class="card-metadata">
+
+                        <div class="metadata-item">
+
+                            <span class="metadata-label">
+                                Deadline
+                            </span>
+
+                            <strong>
+
+                                {% if opportunity.deadline %}
+
                                 {{
-                                    opportunity.organisation_name
-                                    or "Organisation not specified"
+                                opportunity.deadline.strftime(
+                                "%d %b %Y"
+                                )
                                 }}
-                            </p>
 
-                            <div class="metadata-grid">
+                                {% else %}
 
-                                <div>
-                                    <span class="metadata-label">
-                                        Deadline
-                                    </span>
+                                Not identified
 
-                                    <span>
-                                        {% if opportunity.deadline %}
-                                            {{
-                                                opportunity.deadline.strftime(
-                                                    "%d %B %Y"
-                                                )
-                                            }}
-                                        {% else %}
-                                            Not identified
-                                        {% endif %}
-                                    </span>
-                                </div>
+                                {% endif %}
 
-                                <div>
-                                    <span class="metadata-label">
-                                        Source
-                                    </span>
-
-                                    <span>
-                                        {{
-                                            opportunity.source_name
-                                            or "Not specified"
-                                        }}
-                                    </span>
-                                </div>
-
-                                <div>
-                                    <span class="metadata-label">
-                                        Match score
-                                    </span>
-
-                                    <span>
-                                        {{
-                                            opportunity.match_score
-                                            if opportunity.match_score
-                                            is not none
-                                            else "Not scored"
-                                        }}
-                                    </span>
-                                </div>
-
-                                <div>
-                                    <span class="metadata-label">
-                                        First discovered
-                                    </span>
-
-                                    <span>
-                                        {% if opportunity.first_discovered_at %}
-                                            {{
-                                                opportunity.first_discovered_at.strftime(
-                                                    "%d %b %Y"
-                                                )
-                                            }}
-                                        {% else %}
-                                            Not recorded
-                                        {% endif %}
-                                    </span>
-                                </div>
-
-                            </div>
-                        </div>
-
-                        <div class="opportunity-actions">
-
-                            <a
-                                href="/opportunities/{{ opportunity.id }}"
-                                class="secondary-button"
-                            >
-                                View Details
-                            </a>
-
-                            {% if opportunity.source_url %}
-                                <a
-                                    href="{{ opportunity.source_url }}"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="secondary-button"
-                                >
-                                    Open Source
-                                </a>
-                            {% endif %}
-
-                            <form
-                                action="/opportunities/{{ opportunity.id }}/status"
-                                method="post"
-                                class="quick-status-form"
-                            >
-                                <label
-                                    for="status-{{ opportunity.id }}"
-                                >
-                                    Update status
-                                </label>
-
-                                <select
-                                    id="status-{{ opportunity.id }}"
-                                    name="status"
-                                    onchange="this.form.submit()"
-                                >
-                                    {% for status in statuses %}
-                                        <option
-                                            value="{{ status }}"
-                                            {% if opportunity.status == status %}
-                                                selected
-                                            {% endif %}
-                                        >
-                                            {{ status }}
-                                        </option>
-                                    {% endfor %}
-                                </select>
-                            </form>
+                            </strong>
 
                         </div>
-                    </article>
 
-                {% endfor %}
 
-            </section>
+                        <div class="metadata-item">
 
-            {% if total_pages > 1 %}
-                <nav
-                    class="pagination"
-                    aria-label="Opportunity pages"
-                >
-                    {% if page > 1 %}
-                        <a
-                            class="secondary-button"
-                            href="{{ request.url.include_query_params(page=page - 1) }}"
-                        >
-                            Previous
-                        </a>
+                            <span class="metadata-label">
+                                Source
+                            </span>
+
+                            <strong>
+
+                                {{
+                                opportunity.source_name
+                                or "Not specified"
+                                }}
+
+                            </strong>
+
+                        </div>
+
+
+                        <div class="metadata-item">
+
+                            <span class="metadata-label">
+                                Discovered
+                            </span>
+
+                            <strong>
+
+                                {% if opportunity.first_discovered_at %}
+
+                                {{
+                                opportunity.first_discovered_at.strftime(
+                                "%d %b %Y"
+                                )
+                                }}
+
+                                {% else %}
+
+                                Not recorded
+
+                                {% endif %}
+
+                            </strong>
+
+                        </div>
+
+
+                        <div class="metadata-item">
+
+                            <span class="metadata-label">
+                                Status
+                            </span>
+
+                            <strong>
+                                {{ opportunity.status }}
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="discover-card-actions">
+
+                    <a href="/opportunities/{{ opportunity.id }}" class="
+                                primary-button
+                                card-action-primary
+                            ">
+                        View
+                    </a>
+
+
+                    {% if opportunity.is_lead %}
+
+                    <a href="/pipeline" class="ghost-button">
+                        View pipeline
+                    </a>
+
+
+                    {% else %}
+
+                    <form action="/opportunities/{{ opportunity.id }}/pipeline/add" method="post">
+
+                        <button type="submit" class="
+                                        secondary-button
+                                        card-action-full
+                                    ">
+                            Save to pipeline
+                        </button>
+
+                    </form>
+
                     {% endif %}
 
-                    <span>
-                        Page {{ page }} of {{ total_pages }}
-                    </span>
 
-                    {% if page < total_pages %}
-                        <a
-                            class="secondary-button"
-                            href="{{ request.url.include_query_params(page=page + 1) }}"
-                        >
-                            Next
-                        </a>
+                    {% if opportunity.source_url %}
+
+                    <a href="{{ opportunity.source_url }}" target="_blank" rel="noopener noreferrer"
+                        class="source-link">
+                        Open source ↗
+                    </a>
+
                     {% endif %}
-                </nav>
+
+                </div>
+
+            </article>
+
+            {% endfor %}
+
+        </section>
+
+
+        {% if total_pages > 1 %}
+
+        <nav class="
+                    pagination
+                    modern-pagination
+                " aria-label="Opportunity pages">
+
+            {% if page > 1 %}
+
+            <a class="ghost-button" href="{{ request.url.include_query_params(page=page - 1) }}">
+                ← Previous
+            </a>
+
+            {% else %}
+
+            <span></span>
+
             {% endif %}
 
-        {% else %}
 
-            <section class="empty-state">
+            <span class="pagination-status">
 
-                <h3>
-                    No opportunities found
-                </h3>
+                Page {{ page }}
+                of {{ total_pages }}
 
-                <p>
-                    Try changing your filters or run a new scan.
-                </p>
+            </span>
 
-            </section>
+
+            {% if page < total_pages %} <a class="ghost-button"
+                href="{{ request.url.include_query_params(page=page + 1) }}">
+                Next →
+                </a>
+
+                {% else %}
+
+                <span></span>
+
+                {% endif %}
+
+        </nav>
 
         {% endif %}
 
+
+        {% else %}
+
+        <section class="
+                empty-state
+                modern-empty-state
+            ">
+
+            <div class="empty-icon">
+                ⌕
+            </div>
+
+
+            {% if business_profile_active %}
+
+            <h3>
+                No matching opportunities
+            </h3>
+
+            <p>
+                Nothing currently meets your saved
+                business preferences and minimum
+                match score.
+            </p>
+
+            <a href="/business-profile" class="primary-button">
+                Adjust business profile
+            </a>
+
+
+            {% else %}
+
+            <h3>
+                No opportunities found
+            </h3>
+
+            <p>
+                Try a different search
+                or clear your filters.
+            </p>
+
+            <a href="/" class="primary-button">
+                Clear filters
+            </a>
+
+            {% endif %}
+
+        </section>
+
+        {% endif %}
+
+
+        <p class="inbox-policy">
+
+            Undated opportunities leave the inbox after
+            {{ inbox_no_deadline_max_age_days }}
+            days unless refreshed.
+
+            Pipeline opportunities are retained.
+
+        </p>
+
     </main>
+
 </body>
+
 </html>

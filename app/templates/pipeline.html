@@ -1,291 +1,580 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>Pipeline | Opportunity Radar</title>
 
-    <link
-        rel="stylesheet"
-        href="{{ url_for('static', path='/style.css') }}"
-    >
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=4">
 </head>
 
 <body>
-    <header class="main-header">
-        <div class="header-content">
-            <div>
-                <h1>Opportunity Radar</h1>
 
-                <p>
-                    Business Development Pipeline
-                </p>
-            </div>
+    <header class="app-header">
 
-            <div class="header-actions">
-                <nav class="header-navigation">
-                    <a
-                        href="/"
-                        class="header-button"
-                    >
-                        Dashboard
+        <div class="app-header-inner">
+
+            <a href="/" class="brand">
+                <span class="brand-mark">
+                    OR
+                </span>
+
+                <span>
+                    <strong>
+                        Opportunity Radar
+                    </strong>
+
+                    <small>
+                        Business opportunity intelligence
+                    </small>
+                </span>
+            </a>
+
+
+            <div class="topbar-actions">
+
+                <nav class="main-nav" aria-label="Primary navigation">
+                    <a href="/" class="nav-link">
+                        Discover
                     </a>
 
-                    <a
-                        href="/pipeline"
-                        class="header-button active-header-button"
-                    >
+                    <a href="/pipeline" class="nav-link active">
                         Pipeline
                     </a>
+
+                    <a href="/?deadline_filter=archived" class="nav-link">
+                        Archived
+                    </a>
+
+                    <a href="/business-profile" class="nav-link">
+                        Business Profile
+                    </a>
                 </nav>
+
             </div>
+
         </div>
+
     </header>
 
-    <main class="page-container">
 
-        <section class="results-header">
+    <main class="discover-shell pipeline-page-shell">
+
+        <section class="pipeline-hero">
+
             <div>
-                <h2>Pipeline</h2>
 
-                <p>
-                    {{ pipeline_count }}
-                    opportunity{% if pipeline_count != 1 %}ies{% endif %}
-                    currently being pursued
+                <p class="eyebrow">
+                    Business development
                 </p>
+
+                <h1>
+                    Pipeline
+                </h1>
+
+                <p class="hero-copy">
+                    Track and manage the opportunities
+                    your team has chosen to pursue.
+                </p>
+
             </div>
+
+
+            <div class="pipeline-count-card">
+
+                <span>
+                    Active pursuits
+                </span>
+
+                <strong>
+                    {{ pipeline_count }}
+                </strong>
+
+            </div>
+
         </section>
+
 
         {% if opportunities %}
 
-        <section class="pipeline-table-container">
+        <section class="pipeline-board-summary">
 
-            <table class="pipeline-table">
+            <div class="pipeline-summary-item">
 
-                <thead>
+                <span class="pipeline-summary-label">
+                    Total
+                </span>
 
-                    <tr>
+                <strong>
+                    {{ pipeline_count }}
+                </strong>
 
-                        <th>Priority</th>
+            </div>
 
-                        <th>Organisation</th>
 
-                        <th>Opportunity</th>
+            <div class="pipeline-summary-item">
 
-                        <th>Tender Deadline</th>
+                <span class="pipeline-summary-label">
+                    Overdue actions
+                </span>
 
-                        <th>Next Action Due</th>
+                <strong>
+                    {{ overdue_count }}
+                </strong>
 
-                        <th>Assigned To</th>
+            </div>
 
-                        <th>Lead Status</th>
 
-                        <th></th>
+            <div class="pipeline-summary-item">
 
-                    </tr>
+                <span class="pipeline-summary-label">
+                    Unassigned
+                </span>
 
-                </thead>
+                <strong>
+                    {{ unassigned_count }}
+                </strong>
 
-                <tbody>
+            </div>
 
-                {% for opportunity in opportunities %}
 
-                    <tr
+            <div class="pipeline-summary-item">
+
+                <span class="pipeline-summary-label">
+                    High priority
+                </span>
+
+                <strong>
+                    {{ high_priority_count }}
+                </strong>
+
+            </div>
+
+        </section>
+
+
+        <section class="pipeline-card-list">
+
+            {% for opportunity in opportunities %}
+
+            <article class="
+                        pipeline-card
                         {% if opportunity.is_expired %}
-                            class="expired-table-row"
+                            pipeline-card-expired
                         {% endif %}
-                    >
+                    ">
 
-                        <!-- Priority -->
+                <div class="pipeline-card-priority">
 
-                        <td>
-
-                            <span
-                                class="
-                                    priority-label
-                                    priority-{{
-                                        (
-                                            opportunity.lead_priority
-                                            or 'medium'
-                                        )|lower
-                                    }}
-                                "
-                            >
-                                {{
-                                    opportunity.lead_priority
-                                    or "Medium"
+                    <span class="
+                                priority-label
+                                priority-{{
+                                    (
+                                        opportunity.lead_priority
+                                        or 'medium'
+                                    )|lower
                                 }}
-                            </span>
+                            ">
+                        {{
+                        opportunity.lead_priority
+                        or "Medium"
+                        }}
+                    </span>
 
-                        </td>
+                </div>
 
-                        <!-- Organisation -->
 
-                        <td>
+                <div class="pipeline-card-main">
+
+                    <div class="pipeline-card-top">
+
+                        <div>
+
+                            <p class="pipeline-organisation">
+
+                                {{
+                                opportunity.organisation_name
+                                or "Organisation not specified"
+                                }}
+
+                            </p>
+
+
+                            <h2 class="pipeline-card-title">
+
+                                <a href="/opportunities/{{ opportunity.id }}">
+                                    {{ opportunity.title }}
+                                </a>
+
+                            </h2>
+
+                        </div>
+
+
+                        <span class="badge status-badge">
 
                             {{
-                                opportunity.organisation_name
-                                or "Not specified"
+                            opportunity.lead_status
+                            or "Under Review"
                             }}
 
-                        </td>
+                        </span>
 
-                        <!-- Opportunity -->
+                    </div>
 
-                        <td>
 
-                            <a
-                                href="/opportunities/{{ opportunity.id }}"
-                                class="pipeline-opportunity-link"
-                            >
-                                {{ opportunity.title }}
-                            </a>
+                    <div class="pipeline-card-details">
 
-                        </td>
+                        <div class="pipeline-detail-item">
 
-                        <!-- Tender Deadline -->
+                            <span class="metadata-label">
+                                Tender deadline
+                            </span>
 
-                        <td>
+                            <strong>
 
-                            {% if opportunity.deadline %}
+                                {% if opportunity.deadline %}
+
                                 {{
-                                    opportunity.deadline.strftime(
-                                        "%d %b %Y"
-                                    )
+                                opportunity.deadline.strftime(
+                                "%d %b %Y"
+                                )
                                 }}
-                            {% else %}
-                                Not identified
-                            {% endif %}
-
-                        </td>
-
-                        <!-- Next Action Due -->
-
-                        <td>
-
-                            {% if opportunity.next_action_due %}
-
-                                {% if opportunity.next_action_due < today %}
-
-                                    <span class="due-label due-overdue">
-
-                                        Overdue
-
-                                        {{
-                                            opportunity.next_action_due.strftime(
-                                                "%d %b %Y"
-                                            )
-                                        }}
-
-                                    </span>
-
-                                {% elif opportunity.next_action_due == today %}
-
-                                    <span class="due-label due-today">
-
-                                        Due Today
-
-                                    </span>
 
                                 {% else %}
 
-                                    <span class="due-label due-upcoming">
-
-                                        {{
-                                            opportunity.next_action_due.strftime(
-                                                "%d %b %Y"
-                                            )
-                                        }}
-
-                                    </span>
+                                Not identified
 
                                 {% endif %}
 
-                            {% else %}
+                            </strong>
+
+                        </div>
+
+
+                        <div class="pipeline-detail-item">
+
+                            <span class="metadata-label">
+                                Next action due
+                            </span>
+
+
+                            {% if opportunity.next_action_due %}
+
+                            {% if opportunity.next_action_due < today %} <span class="
+                                                due-label
+                                                due-overdue
+                                            ">
+                                Overdue ·
+                                {{
+                                opportunity.next_action_due.strftime(
+                                "%d %b %Y"
+                                )
+                                }}
+                                </span>
+
+
+                                {% elif opportunity.next_action_due == today %}
+
+                                <span class="
+                                                due-label
+                                                due-today
+                                            ">
+                                    Due today
+                                </span>
+
+
+                                {% else %}
+
+                                <span class="
+                                                due-label
+                                                due-upcoming
+                                            ">
+                                    {{
+                                    opportunity.next_action_due.strftime(
+                                    "%d %b %Y"
+                                    )
+                                    }}
+                                </span>
+
+                                {% endif %}
+
+
+                                {% else %}
 
                                 <span class="muted-text">
                                     Not scheduled
                                 </span>
 
-                            {% endif %}
+                                {% endif %}
 
-                        </td>
+                        </div>
 
-                        <!-- Assigned To -->
 
-                        <td>
+                        <div class="pipeline-detail-item">
 
-                            {{
-                                opportunity.assigned_to
-                                or "Unassigned"
-                            }}
-
-                        </td>
-
-                        <!-- Lead Status -->
-
-                        <td>
-
-                            <span class="badge status-badge">
-
-                                {{
-                                    opportunity.lead_status
-                                    or "Under Review"
-                                }}
-
+                            <span class="metadata-label">
+                                Assigned to
                             </span>
 
-                        </td>
+                            <strong>
 
-                        <!-- Open -->
+                                {{
+                                opportunity.assigned_to
+                                or "Unassigned"
+                                }}
 
-                        <td>
+                            </strong>
 
-                            <a
-                                href="/opportunities/{{ opportunity.id }}"
-                                class="secondary-button table-button"
-                            >
-                                Open
-                            </a>
+                        </div>
 
-                        </td>
 
-                    </tr>
+                        <div class="pipeline-detail-item">
 
-                {% endfor %}
+                            <span class="metadata-label">
+                                Match score
+                            </span>
 
-                </tbody>
+                            <strong>
 
-            </table>
+                                {% if opportunity.match_score is not none %}
+                                {{ opportunity.match_score }}
+                                {% else %}
+                                —
+                                {% endif %}
+
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+
+                    {% if opportunity.next_action %}
+
+                    <div class="pipeline-next-action">
+
+                        <span class="metadata-label">
+                            Next action
+                        </span>
+
+                        <p>
+                            {{ opportunity.next_action }}
+                        </p>
+
+                    </div>
+
+                    {% endif %}
+
+
+                    <details class="pipeline-management">
+
+                        <summary class="pipeline-management-toggle">
+                            Manage pursuit
+                        </summary>
+
+
+                        <form method="post" action="/opportunities/{{ opportunity.id }}/pipeline/update"
+                            class="pipeline-management-form">
+
+                            <div class="pipeline-management-grid">
+
+                                <label class="pipeline-field">
+
+                                    <span>
+                                        Priority
+                                    </span>
+
+                                    <select name="lead_priority">
+
+                                        <option value="">
+                                            Not set
+                                        </option>
+
+                                        {% for priority in lead_priorities %}
+
+                                        <option value="{{ priority }}" {% if opportunity.lead_priority==priority %}
+                                            selected {% endif %}>
+                                            {{ priority }}
+                                        </option>
+
+                                        {% endfor %}
+
+                                    </select>
+
+                                </label>
+
+
+                                <label class="pipeline-field">
+
+                                    <span>
+                                        Stage
+                                    </span>
+
+                                    <select name="lead_status">
+
+                                        <option value="">
+                                            Not set
+                                        </option>
+
+                                        {% for lead_status in lead_statuses %}
+
+                                        <option value="{{ lead_status }}" {% if opportunity.lead_status==lead_status %}
+                                            selected {% endif %}>
+                                            {{ lead_status }}
+                                        </option>
+
+                                        {% endfor %}
+
+                                    </select>
+
+                                </label>
+
+
+                                <label class="pipeline-field">
+
+                                    <span>
+                                        Assigned to
+                                    </span>
+
+                                    <input type="text" name="assigned_to" value="{{ opportunity.assigned_to or '' }}"
+                                        placeholder="Team member">
+
+                                </label>
+
+
+                                <label class="pipeline-field">
+
+                                    <span>
+                                        Next action due
+                                    </span>
+
+                                    <input type="date" name="next_action_due"
+                                        value="{% if opportunity.next_action_due %}{{ opportunity.next_action_due.isoformat() }}{% endif %}">
+
+                                </label>
+
+
+                                <label class="pipeline-field">
+
+                                    <span>
+                                        Last follow-up
+                                    </span>
+
+                                    <input type="date" name="last_follow_up_date"
+                                        value="{% if opportunity.last_follow_up_date %}{{ opportunity.last_follow_up_date.isoformat() }}{% endif %}">
+
+                                </label>
+
+                            </div>
+
+
+                            <label class="
+                                        pipeline-field
+                                        pipeline-field-wide
+                                    ">
+
+                                <span>
+                                    Next action
+                                </span>
+
+                                <input type="text" name="next_action" value="{{ opportunity.next_action or '' }}"
+                                    placeholder="Example: Review TOR and confirm bid/no-bid">
+
+                            </label>
+
+
+                            <label class="
+                                        pipeline-field
+                                        pipeline-field-wide
+                                    ">
+
+                                <span>
+                                    Pipeline notes
+                                </span>
+
+                                <textarea name="lead_notes" rows="3"
+                                    placeholder="Decision notes, risks, contacts or follow-up information">{{ opportunity.lead_notes or '' }}</textarea>
+
+                            </label>
+
+
+                            <div class="pipeline-management-actions">
+
+                                <button type="submit" class="primary-button">
+                                    Save changes
+                                </button>
+
+                            </div>
+
+                        </form>
+
+
+                        <form method="post" action="/opportunities/{{ opportunity.id }}/pipeline/remove"
+                            class="pipeline-remove-form"
+                            onsubmit="return confirm('Remove this opportunity from the pipeline?');">
+
+                            <button type="submit" class="pipeline-remove-button">
+                                Remove from pipeline
+                            </button>
+
+                        </form>
+
+                    </details>
+
+                </div>
+
+
+                <div class="pipeline-card-actions">
+
+                    <a href="/opportunities/{{ opportunity.id }}" class="
+                                primary-button
+                                pipeline-open-button
+                            ">
+                        Open pursuit
+                    </a>
+
+
+                    {% if opportunity.source_url %}
+
+                    <a href="{{ opportunity.source_url }}" target="_blank" rel="noopener noreferrer"
+                        class="source-link">
+                        Original source ↗
+                    </a>
+
+                    {% endif %}
+
+                </div>
+
+            </article>
+
+            {% endfor %}
 
         </section>
 
+
         {% else %}
 
-        <section class="empty-state">
+        <section class="empty-state modern-empty-state">
+
+            <div class="empty-icon">
+                ☆
+            </div>
 
             <h3>
-
-                Your Pipeline is empty
-
+                Your pipeline is empty
             </h3>
 
             <p>
-
-                Add opportunities from the Opportunity Details page.
-
+                Save promising opportunities from Discover
+                to start building your pursuit pipeline.
             </p>
 
-            <a
-                href="/"
-                class="primary-button"
-            >
-                Browse Opportunities
+            <a href="/" class="primary-button">
+                Browse opportunities
             </a>
 
         </section>
