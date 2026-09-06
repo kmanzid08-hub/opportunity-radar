@@ -20,7 +20,8 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import get_settings
 from app.database import Base, SessionLocal, engine
-from app.filters import (
+from app.ai_review import run_ai_review
+from app.business_matching import (
     BusinessMatchPreferences,
     score_for_business,
 )
@@ -1285,53 +1286,60 @@ def opportunity_detail(
     opportunity_id: int,
     request: Request,
 ):
+    organization, preference = get_active_business_profile()
+    business_preferences = build_business_match_preferences(preference)
+
     with SessionLocal() as db:
-        opportunity = db.get(
-            Opportunity,
-            opportunity_id,
-        )
+        opportunity = db.get(Opportunity, opportunity_id)
 
         if opportunity is None:
             raise HTTPException(
                 status_code=404,
-                detail=(
-                    "Opportunity not found"
-                ),
+                detail="Opportunity not found",
             )
 
         if opportunity.status == "New":
-            opportunity.status = (
-                "Seen"
-            )
-
+            opportunity.status = "Seen"
             db.commit()
+            db.refresh(opportunity)
 
-            db.refresh(
-                opportunity
+        if business_preferences is not None:
+            match_result = score_for_business(
+                opportunity_to_filtered(opportunity),
+                business_preferences,
             )
+            opportunity.display_match_score = match_result.score
+            opportunity.display_match_reason = (
+                match_result.reason
+                or "This opportunity was evaluated against your saved business profile."
+            )
+            business_match_visible = match_result.is_visible
+        else:
+            opportunity.display_match_score = opportunity.match_score or 0
+            opportunity.display_match_reason = (
+                opportunity.match_reason
+                or "Create a Business Profile to receive personalized matching."
+            )
+            business_match_visible = True
 
     return templates.TemplateResponse(
         request=request,
         name="detail.html",
         context={
-            "opportunity": (
-                opportunity
+            "opportunity": opportunity,
+            "statuses": OPPORTUNITY_STATUSES,
+            "lead_statuses": LEAD_STATUSES,
+            "lead_priorities": LEAD_PRIORITIES,
+            "today": date.today(),
+            "business_profile_active": business_preferences is not None,
+            "business_profile_name": (
+                organization.name if organization else None
             ),
-
-            "statuses": (
-                OPPORTUNITY_STATUSES
-            ),
-
-            "lead_statuses": (
-                LEAD_STATUSES
-            ),
-
-            "lead_priorities": (
-                LEAD_PRIORITIES
-            ),
-
-            "today": (
-                date.today()
+            "business_match_visible": business_match_visible,
+            "business_minimum_match_score": (
+                business_preferences.minimum_match_score
+                if business_preferences
+                else 0
             ),
         },
     )
@@ -2190,11 +2198,165 @@ def save_business_profile(
     )
 
 
+@app.get("/sources")
+def sources_page(
+    request: Request,
+    q: Annotated[str | None, Query()] = None,
+    status: Annotated[str | None, Query()] = None,
+):
+    statement = select(Source)
+
+    if q:
+        search_term = f"%{q.strip()}%"
+        statement = statement.where(
+            or_(
+                Source.organisation_name.ilike(search_term),
+                Source.domain.ilike(search_term),
+                Source.source_type.ilike(search_term),
+            )
+        )
+
+    if status == "active":
+        statement = statement.where(Source.is_active.is_(True))
+    elif status == "disabled":
+        statement = statement.where(Source.is_active.is_(False))
+    elif status == "auto_disabled":
+        statement = statement.where(Source.is_auto_disabled.is_(True))
+
+    statement = statement.order_by(
+        Source.is_active.desc(),
+        Source.priority_score.desc(),
+        Source.confidence_score.desc(),
+        Source.organisation_name.asc(),
+    )
+
+    with SessionLocal() as db:
+        sources = list(db.scalars(statement).all())
+
+        source_count = (
+            db.scalar(select(func.count(Source.id)))
+            or 0
+        )
+
+        active_count = (
+            db.scalar(
+                select(func.count(Source.id)).where(
+                    Source.is_active.is_(True)
+                )
+            )
+            or 0
+        )
+
+        auto_disabled_count = (
+            db.scalar(
+                select(func.count(Source.id)).where(
+                    Source.is_auto_disabled.is_(True)
+                )
+            )
+            or 0
+        )
+
+        total_opportunities_found = (
+            db.scalar(
+                select(
+                    func.coalesce(
+                        func.sum(Source.total_opportunities_found),
+                        0,
+                    )
+                )
+            )
+            or 0
+        )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="sources.html",
+        context={
+            "sources": sources,
+            "source_count": int(source_count),
+            "filtered_count": len(sources),
+            "active_count": int(active_count),
+            "disabled_count": int(source_count) - int(active_count),
+            "auto_disabled_count": int(auto_disabled_count),
+            "total_opportunities_found": int(total_opportunities_found),
+            "selected_q": q or "",
+            "selected_status": status or "",
+        },
+    )
+
+
+@app.post("/sources/{source_id}/disable")
+def disable_source(source_id: int):
+    with SessionLocal() as db:
+        source = db.get(Source, source_id)
+
+        if source is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Source not found",
+            )
+
+        source.is_active = False
+        source.disabled_reason = "Manually disabled."
+        db.commit()
+
+    return RedirectResponse(
+        url="/sources",
+        status_code=303,
+    )
+
+
+@app.post("/sources/{source_id}/enable")
+def enable_source(source_id: int):
+    with SessionLocal() as db:
+        source = db.get(Source, source_id)
+
+        if source is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Source not found",
+            )
+
+        source.is_active = True
+        source.is_approved = True
+        source.is_auto_disabled = False
+        source.consecutive_failures = 0
+        source.disabled_reason = None
+        db.commit()
+
+    return RedirectResponse(
+        url="/sources",
+        status_code=303,
+    )
+
+
 @app.post("/scan")
 def scan_internet():
+    # Discovery only. This route never invokes Claude.
     run_scanner()
 
     return RedirectResponse(
         url="/",
+        status_code=303,
+    )
+
+
+@app.post("/ai-review")
+def run_manual_ai_review():
+    # AI review only. This route never invokes source scanning.
+    summary = run_ai_review()
+
+    redirect_url = (
+        "/?"
+        f"ai_reviewed={summary.reviewed}"
+        f"&ai_accepted={summary.accepted}"
+        f"&ai_rejected={summary.rejected}"
+        f"&ai_needs_review={summary.needs_review}"
+        f"&ai_unavailable={summary.unavailable}"
+        f"&ai_remaining={summary.remaining_unreviewed}"
+    )
+
+    return RedirectResponse(
+        url=redirect_url,
         status_code=303,
     )

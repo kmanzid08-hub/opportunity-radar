@@ -3,755 +3,699 @@
 
 <head>
     <meta charset="UTF-8">
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ opportunity.title }} | Opportunity Radar</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=5">
+    <style>
+        .od-shell {
+            max-width: 1240px;
+            margin: 0 auto;
+            padding: 30px 24px 70px
+        }
 
-    <title>
-        {{ opportunity.title }} | Opportunity Radar
-    </title>
+        .od-back {
+            display: inline-flex;
+            margin-bottom: 22px;
+            font-weight: 700;
+            text-decoration: none
+        }
 
-    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=4">
+        .od-card {
+            background: #fff;
+            border: 1px solid #e6e9ef;
+            border-radius: 20px;
+            box-shadow: 0 10px 35px rgba(15, 23, 42, .05)
+        }
+
+        .od-hero {
+            padding: 34px
+        }
+
+        .od-hero-grid {
+            display: flex;
+            justify-content: space-between;
+            gap: 32px;
+            align-items: flex-start
+        }
+
+        .od-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px
+        }
+
+        .od-title {
+            margin: 16px 0 8px;
+            max-width: 850px;
+            font-size: clamp(30px, 4vw, 46px);
+            line-height: 1.08;
+            letter-spacing: -.035em
+        }
+
+        .od-org {
+            margin: 0;
+            color: #64748b;
+            font-size: 18px
+        }
+
+        .od-actions {
+            display: grid;
+            gap: 10px;
+            min-width: 215px
+        }
+
+        .od-actions form,
+        .od-actions a,
+        .od-actions button {
+            width: 100%;
+            box-sizing: border-box
+        }
+
+        .od-decision {
+            display: grid;
+            grid-template-columns: minmax(0, 1.55fr) minmax(290px, .75fr);
+            gap: 24px;
+            margin-top: 24px
+        }
+
+        .od-match {
+            padding: 30px;
+            border-radius: 20px;
+            background: #111827;
+            color: #fff;
+            overflow: hidden
+        }
+
+        .od-kicker {
+            margin: 0 0 8px;
+            text-transform: uppercase;
+            letter-spacing: .11em;
+            font-size: 12px;
+            font-weight: 800;
+            color: #64748b
+        }
+
+        .od-match .od-kicker {
+            color: #94a3b8
+        }
+
+        .od-score-row {
+            display: flex;
+            align-items: center;
+            gap: 24px
+        }
+
+        .od-score {
+            font-size: 68px;
+            line-height: 1;
+            font-weight: 850;
+            letter-spacing: -.06em
+        }
+
+        .od-score small {
+            font-size: 27px;
+            opacity: .65
+        }
+
+        .od-match-title {
+            font-size: 21px;
+            font-weight: 800
+        }
+
+        .od-match-meta {
+            margin-top: 7px;
+            color: #cbd5e1;
+            font-size: 14px
+        }
+
+        .od-reason {
+            margin: 22px 0 0;
+            color: #e5e7eb;
+            font-size: 16px;
+            line-height: 1.75;
+            white-space: pre-line
+        }
+
+        .od-warning {
+            margin-top: 18px;
+            padding: 13px 15px;
+            border: 1px solid rgba(255, 255, 255, .18);
+            border-radius: 11px;
+            color: #e5e7eb
+        }
+
+        .od-facts {
+            padding: 27px
+        }
+
+        .od-facts h2,
+        .od-content h2 {
+            margin: 0;
+            font-size: 21px
+        }
+
+        .od-facts dl {
+            margin: 20px 0 0
+        }
+
+        .od-fact {
+            padding: 14px 0;
+            border-top: 1px solid #edf0f4
+        }
+
+        .od-fact:first-child {
+            border-top: 0;
+            padding-top: 0
+        }
+
+        .od-fact dt {
+            margin-bottom: 5px;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .08em
+        }
+
+        .od-fact dd {
+            margin: 0;
+            color: #1f2937;
+            font-weight: 700;
+            overflow-wrap: anywhere
+        }
+
+        .od-body {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 340px;
+            gap: 24px;
+            margin-top: 24px;
+            align-items: start
+        }
+
+        .od-content {
+            padding: 32px;
+            margin-bottom: 24px
+        }
+
+        .od-description {
+            margin-top: 24px;
+            color: #374151;
+            font-size: 16px;
+            line-height: 1.85;
+            white-space: pre-line;
+            overflow-wrap: anywhere
+        }
+
+        .od-empty {
+            margin-top: 20px;
+            padding: 18px;
+            border-radius: 12px;
+            background: #f8fafc;
+            color: #64748b
+        }
+
+        .od-review {
+            position: sticky;
+            top: 22px
+        }
+
+        .od-form {
+            display: grid;
+            gap: 18px;
+            margin-top: 22px
+        }
+
+        .od-form label,
+        .od-pipeline label {
+            display: block;
+            margin-bottom: 7px;
+            font-size: 13px;
+            font-weight: 800
+        }
+
+        .od-form select,
+        .od-form textarea,
+        .od-pipeline input,
+        .od-pipeline select,
+        .od-pipeline textarea {
+            width: 100%;
+            box-sizing: border-box
+        }
+
+        .od-pipeline {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+            margin-top: 24px
+        }
+
+        .od-wide {
+            grid-column: 1/-1
+        }
+
+
+        .od-bid-support {
+            padding: 32px;
+            margin-top: 24px
+        }
+
+        .od-bid-support h2 {
+            margin: 0;
+            font-size: 24px
+        }
+
+        .od-bid-intro {
+            margin: 8px 0 0;
+            color: #64748b;
+            line-height: 1.6
+        }
+
+        .od-signal-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 22px
+        }
+
+        .od-signal {
+            padding: 16px;
+            border: 1px solid #e6e9ef;
+            border-radius: 14px;
+            background: #fafbfc
+        }
+
+        .od-signal-good {
+            border-color: #bbf7d0;
+            background: #f0fdf4
+        }
+
+        .od-signal-warning {
+            border-color: #fde68a;
+            background: #fffbeb
+        }
+
+        .od-signal-danger {
+            border-color: #fecaca;
+            background: #fef2f2
+        }
+
+        .od-signal-label {
+            display: block;
+            margin-bottom: 6px;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .08em
+        }
+
+        .od-signal strong {
+            display: block;
+            color: #1f2937;
+            line-height: 1.4
+        }
+
+        .od-recommendation {
+            margin-top: 18px;
+            padding: 18px 20px;
+            border: 1px solid #e6e9ef;
+            border-radius: 14px;
+            background: #f8fafc
+        }
+
+        .od-recommendation strong {
+            display: block;
+            margin-bottom: 6px
+        }
+
+        .od-recommendation p {
+            margin: 0;
+            color: #475569;
+            line-height: 1.65
+        }
+
+        .od-checklist {
+            display: grid;
+            gap: 12px;
+            margin-top: 22px
+        }
+
+        .od-check-item {
+            padding: 15px 17px;
+            border: 1px solid #edf0f4;
+            border-radius: 12px;
+            background: #fafbfc
+        }
+
+        .od-check-item strong {
+            display: block;
+            margin-bottom: 4px;
+            color: #1f2937
+        }
+
+        .od-check-item p {
+            margin: 0;
+            color: #64748b;
+            font-size: 14px;
+            line-height: 1.55
+        }
+
+        @media(max-width:900px) {
+            .od-signal-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr))
+            }
+
+            .od-hero-grid {
+                display: grid
+            }
+
+            .od-decision,
+            .od-body {
+                grid-template-columns: 1fr
+            }
+
+            .od-actions {
+                min-width: 0
+            }
+
+            .od-review {
+                position: static
+            }
+        }
+
+        @media(max-width:620px) {
+            .od-signal-grid {
+                grid-template-columns: 1fr
+            }
+
+            .od-shell {
+                padding: 20px 14px 50px
+            }
+
+            .od-hero,
+            .od-match,
+            .od-facts,
+            .od-content {
+                padding: 22px
+            }
+
+            .od-score-row {
+                display: block
+            }
+
+            .od-score {
+                margin-bottom: 14px
+            }
+
+            .od-pipeline {
+                grid-template-columns: 1fr
+            }
+
+            .od-wide {
+                grid-column: auto
+            }
+        }
+    </style>
 </head>
 
 <body>
-
     <header class="app-header">
-
         <div class="app-header-inner">
-
             <a href="/" class="brand">
-                <span class="brand-mark">
-                    OR
-                </span>
-
-                <span>
-                    <strong>
-                        Opportunity Radar
-                    </strong>
-
-                    <small>
-                        Business opportunity intelligence
-                    </small>
-                </span>
+                <span class="brand-mark">OR</span>
+                <span><strong>Opportunity Radar</strong><small>Business opportunity intelligence</small></span>
             </a>
-
-
             <div class="topbar-actions">
-
                 <nav class="main-nav" aria-label="Primary navigation">
-                    <a href="/" class="nav-link">
-                        Discover
-                    </a>
-
-                    <a href="/pipeline" class="nav-link">
-                        Pipeline
-                    </a>
-
-                    <a href="/?deadline_filter=archived" class="nav-link">
-                        Archived
-                    </a>
-
-                    <a href="/business-profile" class="nav-link">
-                        Business Profile
-                    </a>
+                    <a href="/" class="nav-link">Discover</a>
+                    <a href="/pipeline" class="nav-link">Pipeline</a>
+                    <a href="/?deadline_filter=archived" class="nav-link">Archived</a>
+                    <a href="/business-profile" class="nav-link">Business Profile</a>
                 </nav>
-
             </div>
-
         </div>
-
     </header>
 
+    <main class="od-shell">
+        <a href="/" class="od-back">← Back to opportunities</a>
 
-    <main class="discover-shell detail-page-shell">
+        <section class="od-card od-hero">
+            <div class="od-hero-grid">
+                <div>
+                    <div class="od-badges">
+                        <span class="badge category-badge">{{ opportunity.category or "Uncategorised" }}</span>
+                        <span class="badge status-badge status-{{ opportunity.status|lower }}">{{ opportunity.status
+                            }}</span>
+                        {% if opportunity.is_lead %}<span class="badge pipeline-badge">In pipeline</span>{% endif %}
+                        {% if opportunity.is_expired %}<span class="badge expired-badge">Deadline passed</span>{% endif
+                        %}
+                    </div>
+                    <h1 class="od-title">{{ opportunity.title }}</h1>
+                    <p class="od-org">{{ opportunity.organisation_name or "Organisation not specified" }}</p>
+                </div>
 
-        <div class="detail-back-row">
-
-            <a href="/" class="source-link">
-                ← Back to opportunities
-            </a>
-
-        </div>
-
-
-        <section class="detail-hero-card">
-
-            <div class="detail-hero-main">
-
-                <div class="badge-row">
-
-                    <span class="
-                        badge
-                        category-badge
-                    ">
-                        {{
-                        opportunity.category
-                        or "Uncategorised"
-                        }}
-                    </span>
-
-
-                    <span class="
-                        badge
-                        status-badge
-                        status-{{ opportunity.status|lower }}
-                    ">
-                        {{ opportunity.status }}
-                    </span>
-
-
+                <div class="od-actions">
+                    {% if opportunity.source_url %}
+                    <a href="{{ opportunity.source_url }}" target="_blank" rel="noopener noreferrer"
+                        class="primary-button">Open original notice ↗</a>
+                    {% endif %}
                     {% if opportunity.is_lead %}
-
-                    <span class="
-                            badge
-                            pipeline-badge
-                        ">
-                        In pipeline
-                    </span>
-
+                    <a href="/pipeline" class="secondary-button">View in pipeline</a>
+                    <form action="/opportunities/{{ opportunity.id }}/pipeline/remove" method="post"
+                        onsubmit="return confirm('Remove this opportunity from the pipeline?');">
+                        <button type="submit" class="ghost-button">Remove from pipeline</button>
+                    </form>
+                    {% else %}
+                    <form action="/opportunities/{{ opportunity.id }}/pipeline/add" method="post">
+                        <button type="submit" class="secondary-button">Save to pipeline</button>
+                    </form>
                     {% endif %}
-
-
-                    {% if opportunity.is_expired %}
-
-                    <span class="
-                            badge
-                            expired-badge
-                        ">
-                        Deadline passed
-                    </span>
-
-                    {% endif %}
-
                 </div>
-
-
-                <h1 class="detail-title">
-                    {{ opportunity.title }}
-                </h1>
-
-
-                <p class="detail-organisation">
-
-                    {{
-                    opportunity.organisation_name
-                    or "Organisation not specified"
-                    }}
-
-                </p>
-
-
-                <div class="detail-key-metrics">
-
-                    <div class="detail-metric">
-
-                        <span class="metadata-label">
-                            Match score
-                        </span>
-
-                        <strong>
-
-                            {% if opportunity.match_score is not none %}
-                            {{ opportunity.match_score }}
-                            {% else %}
-                            —
-                            {% endif %}
-
-                        </strong>
-
-                    </div>
-
-
-                    <div class="detail-metric">
-
-                        <span class="metadata-label">
-                            Deadline
-                        </span>
-
-                        <strong>
-
-                            {% if opportunity.deadline %}
-
-                            {{
-                            opportunity.deadline.strftime(
-                            "%d %b %Y"
-                            )
-                            }}
-
-                            {% else %}
-
-                            Not identified
-
-                            {% endif %}
-
-                        </strong>
-
-                    </div>
-
-
-                    <div class="detail-metric">
-
-                        <span class="metadata-label">
-                            Source
-                        </span>
-
-                        <strong>
-
-                            {{
-                            opportunity.source_name
-                            or "Not specified"
-                            }}
-
-                        </strong>
-
-                    </div>
-
-
-                    <div class="detail-metric">
-
-                        <span class="metadata-label">
-                            First discovered
-                        </span>
-
-                        <strong>
-
-                            {% if opportunity.first_discovered_at %}
-
-                            {{
-                            opportunity.first_discovered_at.strftime(
-                            "%d %b %Y"
-                            )
-                            }}
-
-                            {% else %}
-
-                            Not recorded
-
-                            {% endif %}
-
-                        </strong>
-
-                    </div>
-
-
-                    <div class="detail-metric">
-
-                        <span class="metadata-label">
-                            Last seen
-                        </span>
-
-                        <strong>
-
-                            {% if opportunity.last_seen_at %}
-
-                            {{
-                            opportunity.last_seen_at.strftime(
-                            "%d %b %Y"
-                            )
-                            }}
-
-                            {% else %}
-
-                            Not recorded
-
-                            {% endif %}
-
-                        </strong>
-
-                    </div>
-
-                </div>
-
             </div>
-
-
-            <div class="detail-primary-actions">
-
-                {% if opportunity.source_url %}
-
-                <a href="{{ opportunity.source_url }}" target="_blank" rel="noopener noreferrer" class="
-                        primary-button
-                        detail-action-button
-                    ">
-                    Open original notice ↗
-                </a>
-
-                {% endif %}
-
-
-                {% if opportunity.is_lead %}
-
-                <a href="/pipeline" class="
-                        secondary-button
-                        detail-action-button
-                    ">
-                    View in pipeline
-                </a>
-
-
-                <form action="/opportunities/{{ opportunity.id }}/pipeline/remove" method="post"
-                    onsubmit="return confirm('Remove this opportunity from the pipeline?');">
-
-                    <button type="submit" class="
-                            ghost-button
-                            detail-action-button
-                        ">
-                        Remove from pipeline
-                    </button>
-
-                </form>
-
-                {% else %}
-
-                <form action="/opportunities/{{ opportunity.id }}/pipeline/add" method="post">
-
-                    <button type="submit" class="
-                            secondary-button
-                            detail-action-button
-                        ">
-                        Save to pipeline
-                    </button>
-
-                </form>
-
-                {% endif %}
-
-            </div>
-
         </section>
 
-
-        <div class="detail-layout">
-
-            <div class="detail-main-column">
-
-                <section class="detail-section-card">
-
-                    <div class="section-heading">
-
-                        <div>
-
-                            <p class="eyebrow">
-                                Opportunity
-                            </p>
-
-                            <h2>
-                                Description
-                            </h2>
-
+        <div class="od-decision">
+            <section class="od-match">
+                <p class="od-kicker">{% if business_profile_active %}Business profile match{% else %}Opportunity
+                    confidence{%
+                    endif %}</p>
+                <div class="od-score-row">
+                    <div class="od-score">{{ opportunity.display_match_score }}<small>%</small></div>
+                    <div>
+                        <div class="od-match-title">
+                            {% if business_profile_active %}Match for {{ business_profile_name or "your business" }}{%
+                            else %}General notice confidence{% endif %}
                         </div>
-
+                        {% if business_profile_active %}
+                        <div class="od-match-meta">Minimum profile score: {{ business_minimum_match_score }}%</div>
+                        {% endif %}
                     </div>
-
-
-                    {% if opportunity.description %}
-
-                    <div class="description-text detail-description">
-                        {{ opportunity.description }}
-                    </div>
-
-                    {% else %}
-
-                    <div class="detail-empty-message">
-                        No description was extracted for this opportunity.
-                    </div>
-
-                    {% endif %}
-
-                </section>
-
-
-                {% if opportunity.match_reason %}
-
-                <section class="detail-section-card">
-
-                    <div class="section-heading">
-
-                        <div>
-
-                            <p class="eyebrow">
-                                Matching
-                            </p>
-
-                            <h2>
-                                Why this opportunity matched
-                            </h2>
-
-                        </div>
-
-                    </div>
-
-
-                    <p class="description-text match-explanation">
-                        {{ opportunity.match_reason }}
-                    </p>
-
-                </section>
-
+                </div>
+                <div class="od-reason">{{ opportunity.display_match_reason }}</div>
+                {% if business_profile_active and not business_match_visible %}
+                <div class="od-warning">This opportunity is below your current business-profile threshold, but you can
+                    still review it or add it to the pipeline.</div>
                 {% endif %}
+            </section>
 
-
-                {% if opportunity.is_lead %}
-
-                <section class="
-                        detail-section-card
-                        pipeline-detail-card
-                    ">
-
-                    <div class="
-                            section-heading
-                            pipeline-heading
-                        ">
-
-                        <div>
-
-                            <p class="eyebrow">
-                                Pipeline
-                            </p>
-
-                            <h2>
-                                Pursuit workspace
-                            </h2>
-
-                            <p class="section-subtitle">
-                                Track ownership, priority and the next action.
-                            </p>
-
-                        </div>
-
-
-                        <span class="
-                                badge
-                                pipeline-badge
-                            ">
-                            Active pursuit
-                        </span>
-
+            <section class="od-card od-facts">
+                <p class="od-kicker">At a glance</p>
+                <h2>Opportunity details</h2>
+                <dl>
+                    <div class="od-fact">
+                        <dt>Deadline</dt>
+                        <dd>{% if opportunity.deadline %}{{ opportunity.deadline.strftime("%d %b %Y") }}{% else %}Not
+                            identified{% endif %}</dd>
                     </div>
-
-
-                    <form action="/opportunities/{{ opportunity.id }}/pipeline/update" method="post"
-                        class="pipeline-form">
-
-                        <div class="pipeline-form-grid">
-
-                            <div class="form-field">
-
-                                <label for="assigned_to">
-                                    Assigned to
-                                </label>
-
-                                <input id="assigned_to" name="assigned_to" type="text"
-                                    value="{{ opportunity.assigned_to or '' }}" placeholder="Team member responsible">
-
-                            </div>
-
-
-                            <div class="form-field">
-
-                                <label for="lead_priority">
-                                    Priority
-                                </label>
-
-                                <select id="lead_priority" name="lead_priority">
-
-                                    <option value="">
-                                        Select priority
-                                    </option>
-
-                                    {% for priority in lead_priorities %}
-
-                                    <option value="{{ priority }}" {% if opportunity.lead_priority==priority %} selected
-                                        {% endif %}>
-                                        {{ priority }}
-                                    </option>
-
-                                    {% endfor %}
-
-                                </select>
-
-                            </div>
-
-
-                            <div class="form-field">
-
-                                <label for="lead_status">
-                                    Pipeline stage
-                                </label>
-
-                                <select id="lead_status" name="lead_status">
-
-                                    <option value="">
-                                        Select stage
-                                    </option>
-
-                                    {% for lead_status in lead_statuses %}
-
-                                    <option value="{{ lead_status }}" {% if opportunity.lead_status==lead_status %}
-                                        selected {% endif %}>
-                                        {{ lead_status }}
-                                    </option>
-
-                                    {% endfor %}
-
-                                </select>
-
-                            </div>
-
-
-                            <div class="form-field">
-
-                                <label for="next_action_due">
-                                    Next action due
-                                </label>
-
-                                <input id="next_action_due" name="next_action_due" type="date"
-                                    value="{% if opportunity.next_action_due %}{{ opportunity.next_action_due.isoformat() }}{% endif %}">
-
-                            </div>
-
-
-                            <div class="form-field">
-
-                                <label for="last_follow_up_date">
-                                    Last follow-up
-                                </label>
-
-                                <input id="last_follow_up_date" name="last_follow_up_date" type="date"
-                                    value="{% if opportunity.last_follow_up_date %}{{ opportunity.last_follow_up_date.isoformat() }}{% endif %}">
-
-                            </div>
-
-                        </div>
-
-
-                        <div class="form-field">
-
-                            <label for="next_action">
-                                Next action
-                            </label>
-
-                            <textarea id="next_action" name="next_action" rows="3"
-                                placeholder="Example: Request clarification, assign technical lead or prepare proposal outline.">{{ opportunity.next_action or "" }}</textarea>
-
-                        </div>
-
-
-                        <div class="form-field">
-
-                            <label for="lead_notes">
-                                Pipeline notes
-                            </label>
-
-                            <textarea id="lead_notes" name="lead_notes" rows="5"
-                                placeholder="Record follow-ups, decisions, risks and pursuit notes.">{{ opportunity.lead_notes or "" }}</textarea>
-
-                        </div>
-
-
-                        <div class="pipeline-save-row">
-
-                            <button type="submit" class="primary-button">
-                                Save pipeline details
-                            </button>
-
-                        </div>
-
-                    </form>
-
-                </section>
-
-                {% endif %}
-
-            </div>
-
-
-            <aside class="detail-sidebar">
-
-                <section class="
-                    detail-section-card
-                    sticky-review-card
-                ">
-
-                    <div class="section-heading">
-
-                        <div>
-
-                            <p class="eyebrow">
-                                Review
-                            </p>
-
-                            <h2>
-                                Opportunity decision
-                            </h2>
-
-                        </div>
-
+                    <div class="od-fact">
+                        <dt>Category</dt>
+                        <dd>{{ opportunity.category or "Uncategorised" }}</dd>
                     </div>
-
-
-                    <form action="/opportunities/{{ opportunity.id }}/update" method="post" class="review-form">
-
-                        <div class="form-field">
-
-                            <label for="status">
-                                Status
-                            </label>
-
-                            <select id="status" name="status" required>
-
-                                {% for status in statuses %}
-
-                                <option value="{{ status }}" {% if opportunity.status==status %} selected {% endif %}>
-                                    {{ status }}
-                                </option>
-
-                                {% endfor %}
-
-                            </select>
-
-                        </div>
-
-
-                        <div class="form-field">
-
-                            <label for="user_notes">
-                                Internal notes
-                            </label>
-
-                            <textarea id="user_notes" name="user_notes" rows="8"
-                                placeholder="Add your assessment, concerns or decision notes.">{{ opportunity.user_notes or "" }}</textarea>
-
-                        </div>
-
-
-                        <button type="submit" class="
-                            primary-button
-                            full-width-button
-                        ">
-                            Save review
-                        </button>
-
-                    </form>
-
-                </section>
-
-
-                <section class="detail-section-card">
-
-                    <div class="section-heading">
-
-                        <div>
-
-                            <p class="eyebrow">
-                                Source activity
-                            </p>
-
-                            <h2>
-                                Record details
-                            </h2>
-
-                        </div>
-
+                    <div class="od-fact">
+                        <dt>Organisation</dt>
+                        <dd>{{ opportunity.organisation_name or "Not specified" }}</dd>
                     </div>
-
-
-                    <dl class="record-detail-list">
-
-                        <div>
-
-                            <dt>
-                                First discovered
-                            </dt>
-
-                            <dd>
-
-                                {% if opportunity.first_discovered_at %}
-
-                                {{
-                                opportunity.first_discovered_at.strftime(
-                                "%d %b %Y"
-                                )
-                                }}
-
-                                {% else %}
-
-                                Not recorded
-
-                                {% endif %}
-
-                            </dd>
-
-                        </div>
-
-
-                        <div>
-
-                            <dt>
-                                Last seen
-                            </dt>
-
-                            <dd>
-
-                                {% if opportunity.last_seen_at %}
-
-                                {{
-                                opportunity.last_seen_at.strftime(
-                                "%d %b %Y at %H:%M"
-                                )
-                                }}
-
-                                {% else %}
-
-                                Not recorded
-
-                                {% endif %}
-
-                            </dd>
-
-                        </div>
-
-
-                        <div>
-
-                            <dt>
-                                Source
-                            </dt>
-
-                            <dd>
-
-                                {{
-                                opportunity.source_name
-                                or "Not specified"
-                                }}
-
-                            </dd>
-
-                        </div>
-
-
-                        <div>
-
-                            <dt>
-                                Current status
-                            </dt>
-
-                            <dd>
-                                {{ opportunity.status }}
-                            </dd>
-
-                        </div>
-
-                    </dl>
-
-                </section>
-
-            </aside>
-
+                    <div class="od-fact">
+                        <dt>Source</dt>
+                        <dd>{{ opportunity.source_name or "Not specified" }}</dd>
+                    </div>
+                    <div class="od-fact">
+                        <dt>First discovered</dt>
+                        <dd>{% if opportunity.first_discovered_at %}{{ opportunity.first_discovered_at.strftime("%d %b
+                            %Y") }}{% else %}Not recorded{% endif %}</dd>
+                    </div>
+                    <div class="od-fact">
+                        <dt>Last seen</dt>
+                        <dd>{% if opportunity.last_seen_at %}{{ opportunity.last_seen_at.strftime("%d %b %Y at %H:%M")
+                            }}{% else %}Not recorded{% endif %}</dd>
+                    </div>
+                </dl>
+            </section>
         </div>
 
-    </main>
 
+        <section class="od-card od-bid-support">
+            <p class="od-kicker">Bid / No-Bid</p>
+            <h2>Decision support</h2>
+            <p class="od-bid-intro">Use these signals as a first-pass review before committing time to a proposal.
+                Confirm mandatory requirements in the original notice before making a final decision.</p>
+
+            <div class="od-signal-grid">
+                <div
+                    class="od-signal {% if opportunity.is_expired %}od-signal-danger{% elif opportunity.deadline %}od-signal-good{% else %}od-signal-warning{% endif %}">
+                    <span class="od-signal-label">Deadline</span>
+                    <strong>{% if opportunity.is_expired %}Deadline has passed{% elif opportunity.deadline %}Deadline
+                        identified{% else %}Deadline not identified{% endif %}</strong>
+                </div>
+
+                <div
+                    class="od-signal {% if business_profile_active and business_match_visible %}od-signal-good{% else %}od-signal-warning{% endif %}">
+                    <span class="od-signal-label">Business fit</span>
+                    <strong>{% if business_profile_active and business_match_visible %}Meets your profile threshold{%
+                        elif business_profile_active %}Below your profile threshold{% else %}Business Profile not
+                        configured{% endif %}</strong>
+                </div>
+
+                <div
+                    class="od-signal {% if opportunity.description %}od-signal-good{% else %}od-signal-warning{% endif %}">
+                    <span class="od-signal-label">Information</span>
+                    <strong>{% if opportunity.description %}Description available{% else %}Description needs
+                        verification{% endif %}</strong>
+                </div>
+
+                <div
+                    class="od-signal {% if opportunity.source_url %}od-signal-good{% else %}od-signal-warning{% endif %}">
+                    <span class="od-signal-label">Source</span>
+                    <strong>{% if opportunity.source_url %}Original notice available{% else %}Source link unavailable{%
+                        endif %}</strong>
+                </div>
+            </div>
+
+            <div class="od-recommendation">
+                <strong>Recommended next step</strong>
+                <p>
+                    {% if opportunity.is_expired %}
+                    Do not pursue unless the buyer has formally extended or reopened the deadline.
+                    {% elif business_profile_active and business_match_visible and opportunity.description and
+                    opportunity.source_url %}
+                    Review the original notice, confirm mandatory eligibility requirements, then make a bid/no-bid
+                    decision or move the opportunity into the pipeline.
+                    {% elif business_profile_active and not business_match_visible %}
+                    Review only if there is a strategic reason to pursue an opportunity outside your normal Business
+                    Profile.
+                    {% elif not business_profile_active %}
+                    Verify the original notice and eligibility requirements before deciding. A saved Business Profile
+                    will add company-specific fit scoring.
+                    {% else %}
+                    Verify the missing information before committing proposal resources.
+                    {% endif %}
+                </p>
+            </div>
+        </section>
+
+        <div class="od-body">
+            <div>
+                <section class="od-card od-content">
+                    <p class="od-kicker">Opportunity</p>
+                    <h2>About this opportunity</h2>
+                    {% if opportunity.description %}
+                    <div class="od-description">{{ opportunity.description }}</div>
+                    {% else %}
+                    <div class="od-empty">No description was extracted for this opportunity. Use “Open original notice”
+                        above to review the source.</div>
+                    {% endif %}
+                </section>
+
+
+                <section class="od-card od-content">
+                    <p class="od-kicker">Pre-bid review</p>
+                    <h2>What to confirm before pursuing</h2>
+                    <div class="od-checklist">
+                        <div class="od-check-item"><strong>Eligibility</strong>
+                            <p>Confirm registration, licences, certifications, turnover, prior experience and any
+                                geographic eligibility requirements.</p>
+                        </div>
+                        <div class="od-check-item"><strong>Scope and deliverables</strong>
+                            <p>Check the required services, deliverables, implementation period, staffing and expected
+                                level of effort.</p>
+                        </div>
+                        <div class="od-check-item"><strong>Submission requirements</strong>
+                            <p>Confirm the proposal format, mandatory documents, submission channel, deadline and any
+                                bid-security requirements.</p>
+                        </div>
+                        <div class="od-check-item"><strong>Commercial fit</strong>
+                            <p>Assess likely contract value, proposal effort, competition, delivery risk and whether the
+                                opportunity is strategically worthwhile.</p>
+                        </div>
+                    </div>
+                </section>
+
+                {% if opportunity.is_lead %}
+                <section class="od-card od-content">
+                    <p class="od-kicker">Pipeline</p>
+                    <h2>Pursuit workspace</h2>
+                    <form action="/opportunities/{{ opportunity.id }}/pipeline/update" method="post"
+                        class="od-pipeline">
+                        <div><label for="assigned_to">Assigned to</label><input id="assigned_to" name="assigned_to"
+                                type="text" value="{{ opportunity.assigned_to or '' }}"
+                                placeholder="Team member responsible"></div>
+                        <div><label for="lead_priority">Priority</label><select id="lead_priority" name="lead_priority">
+                                <option value="">Select priority</option>{% for priority in lead_priorities %}<option
+                                    value="{{ priority }}" {% if opportunity.lead_priority==priority %}selected{% endif
+                                    %}>{{ priority }}</option>{% endfor %}
+                            </select></div>
+                        <div><label for="lead_status">Pipeline stage</label><select id="lead_status" name="lead_status">
+                                <option value="">Select stage</option>{% for lead_status in lead_statuses %}<option
+                                    value="{{ lead_status }}" {% if opportunity.lead_status==lead_status %}selected{%
+                                    endif %}>{{ lead_status }}</option>{% endfor %}
+                            </select></div>
+                        <div><label for="next_action_due">Next action due</label><input id="next_action_due"
+                                name="next_action_due" type="date"
+                                value="{% if opportunity.next_action_due %}{{ opportunity.next_action_due.isoformat() }}{% endif %}">
+                        </div>
+                        <div><label for="last_follow_up_date">Last follow-up</label><input id="last_follow_up_date"
+                                name="last_follow_up_date" type="date"
+                                value="{% if opportunity.last_follow_up_date %}{{ opportunity.last_follow_up_date.isoformat() }}{% endif %}">
+                        </div>
+                        <div class="od-wide"><label for="next_action">Next action</label><textarea id="next_action"
+                                name="next_action" rows="3"
+                                placeholder="What should happen next?">{{ opportunity.next_action or "" }}</textarea>
+                        </div>
+                        <div class="od-wide"><label for="lead_notes">Pipeline notes</label><textarea id="lead_notes"
+                                name="lead_notes" rows="5"
+                                placeholder="Decisions, risks and pursuit notes.">{{ opportunity.lead_notes or "" }}</textarea>
+                        </div>
+                        <div class="od-wide"><button type="submit" class="primary-button">Save pipeline details</button>
+                        </div>
+                    </form>
+                </section>
+                {% endif %}
+            </div>
+
+            <aside>
+                <section class="od-card od-content od-review">
+                    <p class="od-kicker">Your review</p>
+                    <h2>Opportunity decision</h2>
+                    <form action="/opportunities/{{ opportunity.id }}/update" method="post" class="od-form">
+                        <div>
+                            <label for="status">Status</label>
+                            <select id="status" name="status" required>
+                                {% for status in statuses %}
+                                <option value="{{ status }}" {% if opportunity.status==status %}selected{% endif %}>{{
+                                    status }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div><label for="user_notes">Internal notes</label><textarea id="user_notes" name="user_notes"
+                                rows="8"
+                                placeholder="Assessment, concerns or decision notes.">{{ opportunity.user_notes or "" }}</textarea>
+                        </div>
+                        <button type="submit" class="primary-button">Save review</button>
+                    </form>
+                </section>
+            </aside>
+        </div>
+    </main>
 </body>
 
 </html>

@@ -8,7 +8,7 @@
 
     <title>Opportunity Radar</title>
 
-    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=5">
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=8">
 </head>
 
 <body>
@@ -37,6 +37,7 @@
             <div class="topbar-actions">
 
                 <nav class="main-nav" aria-label="Primary navigation">
+
                     <a href="/" class="nav-link active">
                         Discover
                     </a>
@@ -49,11 +50,26 @@
                         Archived
                     </a>
 
+                    <a href="/sources" class="nav-link">
+                        Sources
+                    </a>
+
                     <a href="/business-profile" class="nav-link">
                         Business Profile
                     </a>
+
                 </nav>
 
+
+                <form
+                    action="/ai-review"
+                    method="post"
+                    title="Claude reviews only a small cost-controlled batch when you click this button."
+                >
+                    <button type="submit" class="scan-button">
+                        Run AI check
+                    </button>
+                </form>
 
                 <form action="/scan" method="post">
                     <button type="submit" class="scan-button">
@@ -69,6 +85,50 @@
 
 
     <main class="discover-shell">
+
+        {% if request.query_params.get("ai_reviewed") is not none %}
+        <section
+            class="operations-strip"
+            aria-label="AI review result"
+            style="margin-bottom: 18px;"
+        >
+            <div>
+                <span>Claude reviewed</span>
+                <strong>{{ request.query_params.get("ai_reviewed", "0") }}</strong>
+            </div>
+
+            <div>
+                <span>Accepted</span>
+                <strong>{{ request.query_params.get("ai_accepted", "0") }}</strong>
+            </div>
+
+            <div>
+                <span>False positives removed</span>
+                <strong>{{ request.query_params.get("ai_rejected", "0") }}</strong>
+            </div>
+
+            <div>
+                <span>Needs review</span>
+                <strong>{{ request.query_params.get("ai_needs_review", "0") }}</strong>
+            </div>
+
+            <div>
+                <span>AI unavailable</span>
+                <strong>{{ request.query_params.get("ai_unavailable", "0") }}</strong>
+            </div>
+
+            <div>
+                <span>Still unreviewed</span>
+                <strong>{{ request.query_params.get("ai_remaining", "0") }}</strong>
+            </div>
+        </section>
+        {% endif %}
+
+
+
+        <!-- =====================================================
+         HERO
+    ====================================================== -->
 
         <section class="discover-hero">
 
@@ -87,6 +147,11 @@
                     opportunities into your pipeline.
                 </p>
 
+                <p class="hero-copy" style="margin-top: 8px; font-size: 13px;">
+                    AI verification is manual and cost-controlled.
+                    Claude runs only when you click <strong>Run AI check</strong>.
+                </p>
+
             </div>
 
 
@@ -103,6 +168,10 @@
 
         </section>
 
+
+        <!-- =====================================================
+         BUSINESS PROFILE STATUS
+    ====================================================== -->
 
         {% if business_profile_active %}
 
@@ -129,6 +198,19 @@
 
                 <strong>
                     {{ business_minimum_match_score }}
+                </strong>
+
+            </div>
+
+
+            <div>
+
+                <span>
+                    Matching mode
+                </span>
+
+                <strong>
+                    Business Profile
                 </strong>
 
             </div>
@@ -174,6 +256,10 @@
 
         {% endif %}
 
+
+        <!-- =====================================================
+         PRIMARY METRICS
+    ====================================================== -->
 
         <section class="primary-metrics" aria-label="Opportunity metrics">
 
@@ -258,6 +344,10 @@
         </section>
 
 
+        <!-- =====================================================
+         OPERATIONAL METRICS
+    ====================================================== -->
+
         <section class="operations-strip" aria-label="System activity">
 
             <div>
@@ -327,6 +417,10 @@
         </section>
 
 
+        <!-- =====================================================
+         FILTERS
+    ====================================================== -->
+
         <section class="discovery-toolbar">
 
             <form action="/" method="get" class="discover-filter-form">
@@ -362,7 +456,6 @@
                         <option value="">
                             All categories
                         </option>
-
 
                         {% for category in categories %}
 
@@ -430,7 +523,6 @@
                             All statuses
                         </option>
 
-
                         {% for status in statuses %}
 
                         <option value="{{ status }}" {% if selected_status==status %} selected {% endif %}>
@@ -460,6 +552,10 @@
 
         </section>
 
+
+        <!-- =====================================================
+         RESULTS HEADER
+    ====================================================== -->
 
         <section class="results-toolbar">
 
@@ -556,6 +652,10 @@
         </section>
 
 
+        <!-- =====================================================
+         OPPORTUNITIES
+    ====================================================== -->
+
         {% if opportunities %}
 
         <section class="opportunity-feed">
@@ -569,12 +669,22 @@
             %}
 
 
+            {% set display_reason =
+            opportunity.display_match_reason
+            if opportunity.display_match_reason is defined
+            else opportunity.match_reason
+            %}
+
+
             <article class="
                         discover-card
+
                         {% if opportunity.is_expired %}
                             discover-card-expired
                         {% endif %}
                     ">
+
+                <!-- MATCH SCORE -->
 
                 <div class="score-column">
 
@@ -592,11 +702,7 @@
                                     {% else %}
                                         match-score-low
                                     {% endif %}
-                                " title="{{
-                                    opportunity.display_match_reason
-                                    if opportunity.display_match_reason is defined
-                                    else opportunity.match_reason
-                                }}">
+                                " title="{{ display_reason }}">
 
                         <strong>
                             {{ display_score }}
@@ -613,7 +719,6 @@
                         </span>
 
                     </div>
-
 
                     {% else %}
 
@@ -636,6 +741,8 @@
 
                 </div>
 
+
+                <!-- MAIN OPPORTUNITY INFORMATION -->
 
                 <div class="discover-card-main">
 
@@ -708,6 +815,68 @@
 
                     </p>
 
+
+                    <!-- BUSINESS MATCH EXPLANATION -->
+
+                    {% if business_profile_active and display_reason %}
+
+                    <div style="
+                                    margin-top: 16px;
+                                    padding: 14px 16px;
+                                    border: 1px solid #e7e9ee;
+                                    border-radius: 10px;
+                                    background: #fafbfc;
+                                ">
+
+                        <span class="metadata-label" style="
+                                        display: block;
+                                        margin-bottom: 7px;
+                                    ">
+                            Why this matches your business
+                        </span>
+
+
+                        <p style="
+                                        margin: 0;
+                                        line-height: 1.55;
+                                        font-size: 14px;
+                                    ">
+                            {{ display_reason }}
+                        </p>
+
+                    </div>
+
+                    {% elif display_reason %}
+
+                    <div style="
+                                    margin-top: 16px;
+                                    padding: 14px 16px;
+                                    border: 1px solid #e7e9ee;
+                                    border-radius: 10px;
+                                    background: #fafbfc;
+                                ">
+
+                        <span class="metadata-label" style="
+                                        display: block;
+                                        margin-bottom: 7px;
+                                    ">
+                            Opportunity signals
+                        </span>
+
+                        <p style="
+                                        margin: 0;
+                                        line-height: 1.55;
+                                        font-size: 14px;
+                                    ">
+                            {{ display_reason }}
+                        </p>
+
+                    </div>
+
+                    {% endif %}
+
+
+                    <!-- METADATA -->
 
                     <div class="card-metadata">
 
@@ -800,6 +969,8 @@
                 </div>
 
 
+                <!-- ACTIONS -->
+
                 <div class="discover-card-actions">
 
                     <a href="/opportunities/{{ opportunity.id }}" class="
@@ -815,7 +986,6 @@
                     <a href="/pipeline" class="ghost-button">
                         View pipeline
                     </a>
-
 
                     {% else %}
 
@@ -851,6 +1021,10 @@
         </section>
 
 
+        <!-- =================================================
+             PAGINATION
+        ================================================== -->
+
         {% if total_pages > 1 %}
 
         <nav class="
@@ -860,7 +1034,11 @@
 
             {% if page > 1 %}
 
-            <a class="ghost-button" href="{{ request.url.include_query_params(page=page - 1) }}">
+            <a class="ghost-button" href="{{
+                            request.url.include_query_params(
+                                page=page - 1
+                            )
+                        }}">
                 ← Previous
             </a>
 
@@ -879,8 +1057,11 @@
             </span>
 
 
-            {% if page < total_pages %} <a class="ghost-button"
-                href="{{ request.url.include_query_params(page=page + 1) }}">
+            {% if page < total_pages %} <a class="ghost-button" href="{{
+                            request.url.include_query_params(
+                                page=page + 1
+                            )
+                        }}">
                 Next →
                 </a>
 
@@ -896,6 +1077,10 @@
 
 
         {% else %}
+
+        <!-- =================================================
+             EMPTY STATE
+        ================================================== -->
 
         <section class="
                 empty-state
@@ -915,14 +1100,13 @@
 
             <p>
                 Nothing currently meets your saved
-                business preferences and minimum
-                match score.
+                Business Profile preferences and
+                minimum match score.
             </p>
 
             <a href="/business-profile" class="primary-button">
                 Adjust business profile
             </a>
-
 
             {% else %}
 
@@ -945,6 +1129,10 @@
 
         {% endif %}
 
+
+        <!-- =====================================================
+         INBOX POLICY
+    ====================================================== -->
 
         <p class="inbox-policy">
 

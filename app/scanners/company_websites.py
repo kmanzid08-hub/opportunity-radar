@@ -40,7 +40,17 @@ class CompanyWebsiteScanner(BaseScanner):
     MAX_CRAWL_DEPTH = 2
 
     FAILURE_DISABLE_THRESHOLD = 10
+
+    # Adaptive source scheduling. Productive and healthy sources are
+    # revisited more often; weak or failing sources consume less crawl time.
+    VERY_HIGH_PRIORITY_SCAN_INTERVAL_HOURS = 6
+    HIGH_PRIORITY_SCAN_INTERVAL_HOURS = 12
     DEFAULT_SCAN_INTERVAL_HOURS = 24
+    LOW_PRIORITY_SCAN_INTERVAL_HOURS = 48
+    VERY_LOW_PRIORITY_SCAN_INTERVAL_HOURS = 72
+
+    RECENT_OPPORTUNITY_WINDOW_DAYS = 14
+    STALE_OPPORTUNITY_WINDOW_DAYS = 60
 
     MIN_PAGE_TEXT_LENGTH = 80
     MAX_DESCRIPTION_LENGTH = 20_000
@@ -509,13 +519,37 @@ class CompanyWebsiteScanner(BaseScanner):
 
                     changed = True
 
-                if source.priority_score is None:
-                    source.priority_score = (
-                        self._calculate_priority(
-                            source
-                        )
+                recalculated_priority = (
+                    self._calculate_priority(
+                        source
                     )
+                )
 
+                if (
+                    source.priority_score is None
+                    or abs(
+                        float(source.priority_score)
+                        - recalculated_priority
+                    ) >= 0.01
+                ):
+                    source.priority_score = (
+                        recalculated_priority
+                    )
+                    changed = True
+
+                recalculated_interval = (
+                    self._calculate_scan_interval(
+                        source
+                    )
+                )
+
+                if (
+                    source.scan_interval_hours
+                    != recalculated_interval
+                ):
+                    source.scan_interval_hours = (
+                        recalculated_interval
+                    )
                     changed = True
 
                 if self._source_is_due(
@@ -1490,6 +1524,12 @@ class CompanyWebsiteScanner(BaseScanner):
                 )
             )
 
+            source.scan_interval_hours = (
+                self._calculate_scan_interval(
+                    source
+                )
+            )
+
             db.commit()
 
     def _record_scan_failure(
@@ -1563,19 +1603,33 @@ class CompanyWebsiteScanner(BaseScanner):
                 )
             )
 
+            source.scan_interval_hours = (
+                self._calculate_scan_interval(
+                    source
+                )
+            )
+
             db.commit()
 
     def _calculate_priority(
         self,
         source: Source,
     ) -> float:
+        """
+        Calculate a source-health priority score.
+
+        Discovery confidence and URL relevance provide the stable base.
+        Recent opportunity production raises priority, while stale production
+        and repeated failures reduce it. This prevents a source from remaining
+        permanently high priority because of old historical results.
+        """
 
         score = (
             float(
                 source.confidence_score
                 or 0
             )
-            * 0.55
+            * 0.50
         )
 
         score += (
@@ -1586,29 +1640,75 @@ class CompanyWebsiteScanner(BaseScanner):
             * 0.20
         )
 
+        total_found = int(
+            source.total_opportunities_found
+            or 0
+        )
+
+        # Lifetime productivity matters, but is deliberately capped so old
+        # historical results cannot dominate source health forever.
         score += min(
-            int(
-                source.total_opportunities_found
-                or 0
+            total_found * 1.25,
+            15.0,
+        )
+
+        now = datetime.now(
+            timezone.utc
+        )
+
+        last_opportunity_found_at = (
+            source.last_opportunity_found_at
+        )
+
+        if last_opportunity_found_at is not None:
+            if last_opportunity_found_at.tzinfo is None:
+                last_opportunity_found_at = (
+                    last_opportunity_found_at.replace(
+                        tzinfo=timezone.utc
+                    )
+                )
+
+            opportunity_age = (
+                now
+                - last_opportunity_found_at
             )
-            * 2,
-            20,
+
+            if opportunity_age <= timedelta(
+                days=self.RECENT_OPPORTUNITY_WINDOW_DAYS
+            ):
+                score += 15.0
+
+            elif opportunity_age <= timedelta(
+                days=self.STALE_OPPORTUNITY_WINDOW_DAYS
+            ):
+                score += 7.5
+
+            else:
+                score -= 7.5
+
+        elif source.last_successful_scan_at:
+            # A healthy source that has never produced anything should slowly
+            # give way to more productive sources.
+            score -= 5.0
+
+        failures = int(
+            source.consecutive_failures
+            or 0
         )
 
         score -= min(
-            int(
-                source.consecutive_failures
-                or 0
-            )
-            * 5,
-            35,
+            failures * 7.5,
+            45.0,
         )
 
-        if source.last_successful_scan_at:
-            score += 5
+        if (
+            source.last_successful_scan_at
+            and failures == 0
+        ):
+            score += 5.0
 
         if source.is_auto_disabled:
-            score = 0
+            score = 0.0
 
         return max(
             0.0,
@@ -1619,6 +1719,90 @@ class CompanyWebsiteScanner(BaseScanner):
                 ),
                 100.0,
             ),
+        )
+
+    def _calculate_scan_interval(
+        self,
+        source: Source,
+    ) -> int:
+        """
+        Choose how frequently a source should be scanned.
+
+        The interval is intentionally derived from existing Source fields so
+        no schema migration is required.
+        """
+
+        if source.is_auto_disabled or not source.is_active:
+            return self.VERY_LOW_PRIORITY_SCAN_INTERVAL_HOURS
+
+        failures = int(
+            source.consecutive_failures
+            or 0
+        )
+
+        if failures >= 7:
+            return self.VERY_LOW_PRIORITY_SCAN_INTERVAL_HOURS
+
+        if failures >= 4:
+            return self.LOW_PRIORITY_SCAN_INTERVAL_HOURS
+
+        priority = float(
+            source.priority_score
+            if source.priority_score is not None
+            else self._calculate_priority(source)
+        )
+
+        now = datetime.now(
+            timezone.utc
+        )
+
+        recently_productive = False
+
+        if source.last_opportunity_found_at is not None:
+            last_found = (
+                source.last_opportunity_found_at
+            )
+
+            if last_found.tzinfo is None:
+                last_found = last_found.replace(
+                    tzinfo=timezone.utc
+                )
+
+            recently_productive = (
+                now - last_found
+                <= timedelta(
+                    days=self.RECENT_OPPORTUNITY_WINDOW_DAYS
+                )
+            )
+
+        if (
+            priority >= 85
+            and recently_productive
+            and failures == 0
+        ):
+            return (
+                self
+                .VERY_HIGH_PRIORITY_SCAN_INTERVAL_HOURS
+            )
+
+        if (
+            priority >= 70
+            and failures == 0
+        ):
+            return (
+                self
+                .HIGH_PRIORITY_SCAN_INTERVAL_HOURS
+            )
+
+        if priority >= 45:
+            return self.DEFAULT_SCAN_INTERVAL_HOURS
+
+        if priority >= 25:
+            return self.LOW_PRIORITY_SCAN_INTERVAL_HOURS
+
+        return (
+            self
+            .VERY_LOW_PRIORITY_SCAN_INTERVAL_HOURS
         )
 
     def _is_document_url(

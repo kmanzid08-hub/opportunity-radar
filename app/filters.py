@@ -30,12 +30,6 @@ class ClassificationDecision:
 
 @dataclass(frozen=True)
 class BusinessMatchPreferences:
-    """
-    Business-specific matching configuration.
-
-    This structure deliberately has no database dependency.
-    """
-
     countries: tuple[str, ...] = ()
     regions: tuple[str, ...] = ()
     industries: tuple[str, ...] = ()
@@ -87,8 +81,11 @@ STRONG_PROCUREMENT_TERMS: tuple[str, ...] = (
     "bidding document",
     "bid document",
     "framework agreement",
+    "framework contract",
     "supplier registration",
     "vendor registration",
+    "supplier prequalification",
+    "vendor prequalification",
     "prequalification notice",
 )
 
@@ -188,7 +185,7 @@ FIRM_INDICATORS: tuple[str, ...] = (
 
 
 # ==========================================================
-# NON-OPPORTUNITY / JUNK SIGNALS
+# NON-OPPORTUNITY SIGNALS
 # ==========================================================
 
 
@@ -212,6 +209,125 @@ EMPLOYMENT_ONLY_TERMS: tuple[str, ...] = (
     "apply for this job",
 )
 
+
+STRONG_NOTICE_TITLE_TERMS: tuple[str, ...] = (
+    "request for proposal",
+    "request for proposals",
+    "request for quotation",
+    "request for quotations",
+    "request for expression of interest",
+    "request for expressions of interest",
+    "expression of interest",
+    "expressions of interest",
+    "invitation to bid",
+    "invitation for bids",
+    "invitation to tender",
+    "invitation for tender",
+    "call for proposals",
+    "call for applications",
+    "terms of reference",
+    "tender notice",
+    "procurement notice",
+    "supplier registration",
+    "supplier prequalification",
+    "vendor prequalification",
+    "framework agreement",
+    "framework contract",
+)
+
+TITLE_NOTICE_PREFIXES: tuple[str, ...] = (
+    "tender:",
+    "tender ",
+    "rfp:",
+    "rfp ",
+    "rfq:",
+    "rfq ",
+    "eoi:",
+    "eoi ",
+    "tor:",
+    "tor ",
+)
+
+INFORMATIONAL_OR_DIRECTORY_TITLE_TERMS: tuple[str, ...] = (
+    "calls for tenders",
+    "tenders and procurement opportunities",
+    "tender opportunities",
+    "tender notices",
+    "procurement intelligence services",
+    "schedule a free demo",
+    "invitation to bid explained",
+    "what is a bid",
+    "what is an invitation to bid",
+    "training course",
+    "training program",
+    "training programme",
+    "course on",
+    "career gateways",
+    "browse the latest jobs",
+    "new job listings",
+    "discover your next career move",
+    "for businesses",
+    "pricing",
+)
+
+INFORMATIONAL_URL_TERMS: tuple[str, ...] = (
+    "/services",
+    "/pricing",
+    "/careers",
+    "/jobs-list",
+    "/training/",
+    "/course/",
+    "/courses/",
+    "/library/",
+    "/guides/",
+    "/blog/",
+    "/country/",
+    "/international/",
+    "schedule_request_demo",
+)
+
+COMMERCIAL_SERVICE_PAGE_TERMS: tuple[str, ...] = (
+    "our services",
+    "we offer",
+    "we provide",
+    "our solutions",
+    "our expertise",
+    "why choose us",
+    "contact our team",
+    "contact us today",
+    "get in touch",
+    "book a consultation",
+    "request a consultation",
+    "learn more about our services",
+    "professional services company",
+    "leading provider",
+    "service provider in",
+    "services in",
+    "outsourcing services",
+    "payroll services in",
+    "recruitment services in",
+    "tax services in",
+    "accounting services in",
+    "audit services in",
+    "consulting services in",
+)
+
+COMMERCIAL_TITLE_PATTERNS: tuple[str, ...] = (
+    "services in",
+    "company in",
+    "agency in",
+    "firm in",
+    "solutions in",
+    "outsourcing",
+    "global eor",
+    "employer of record",
+)
+
+SEO_TITLE_SEPARATORS: tuple[str, ...] = (
+    " | ",
+    " - ",
+    " • ",
+)
 
 GENERIC_PAGE_TERMS: tuple[str, ...] = (
     "about us",
@@ -318,6 +434,8 @@ CATEGORY_RULES: tuple[CategoryRule, ...] = (
             "management information system",
             "website development",
             "mobile application development",
+            "systems integration",
+            "data center services",
         ),
         broad_terms=(
             "software",
@@ -332,6 +450,7 @@ CATEGORY_RULES: tuple[CategoryRule, ...] = (
             "erp",
             "mis",
             "website",
+            "technology",
         ),
     ),
 
@@ -700,46 +819,449 @@ CATEGORY_RULES: tuple[CategoryRule, ...] = (
 
 
 # ==========================================================
-# OPPORTUNITY TYPE DETECTION
+# OPPORTUNITY TYPES
 # ==========================================================
 
 
-TENDER_TYPE_TERMS: tuple[str, ...] = (
-    "tender",
-    "procurement",
-    "request for proposal",
-    "request for quotation",
-    "rfp",
-    "rfq",
-    "eoi",
-    "expression of interest",
-    "invitation to bid",
-    "invitation to tender",
+OPPORTUNITY_TYPE_RULES: dict[str, tuple[str, ...]] = {
+    "RFP": (
+        "request for proposal",
+        "request for proposals",
+        "rfp",
+    ),
+
+    "RFQ": (
+        "request for quotation",
+        "request for quotations",
+        "rfq",
+    ),
+
+    "EOI": (
+        "expression of interest",
+        "expressions of interest",
+        "request for expression of interest",
+        "request for expressions of interest",
+        "eoi",
+    ),
+
+    "Tender": (
+        "tender",
+        "tender notice",
+        "invitation to tender",
+        "invitation for tender",
+        "invitation to bid",
+        "invitation for bids",
+        "procurement notice",
+        "itb",
+        "itt",
+    ),
+
+    "Supplier Registration": (
+        "supplier registration",
+        "vendor registration",
+        "supplier prequalification",
+        "vendor prequalification",
+        "prequalification of suppliers",
+        "prequalification of vendors",
+        "prequalification notice",
+    ),
+
+    "Framework Agreement": (
+        "framework agreement",
+        "framework contract",
+    ),
+
+    "Grant": (
+        "grant opportunity",
+        "grant opportunities",
+        "funding opportunity",
+        "funding opportunities",
+        "funding call",
+        "call for grant proposals",
+        "call for applications",
+    ),
+
+    "Partnership": (
+        "partnership opportunity",
+        "partnership opportunities",
+        "strategic partnership",
+        "collaboration opportunity",
+        "joint venture",
+    ),
+
+    "Job": (
+        "job vacancy",
+        "job vacancies",
+        "vacancy announcement",
+        "career opportunity",
+        "employment opportunity",
+        "vacant position",
+        "apply for this job",
+    ),
+}
+
+
+TENDER_LIKE_TYPES: frozenset[str] = frozenset(
+    {
+        "Tender",
+        "RFP",
+        "RFQ",
+        "EOI",
+        "Supplier Registration",
+        "Framework Agreement",
+    }
 )
 
 
-GRANT_TYPE_TERMS: tuple[str, ...] = (
-    "grant",
-    "funding opportunity",
-    "funding call",
-)
+# ==========================================================
+# BUSINESS TERM ALIASES
+# ==========================================================
 
 
-PARTNERSHIP_TYPE_TERMS: tuple[str, ...] = (
-    "partnership",
-    "strategic partnership",
-    "collaboration",
-    "joint venture",
-)
+BUSINESS_TERM_ALIASES: dict[str, tuple[str, ...]] = {
+    "ict": (
+        "ict",
+        "information technology",
+        "technology",
+        "digital",
+        "software",
+    ),
+
+    "information technology": (
+        "information technology",
+        "ict",
+        "technology",
+        "software",
+        "digital",
+    ),
+
+    "software development": (
+        "software development",
+        "software engineering",
+        "application development",
+        "system development",
+        "systems development",
+    ),
+
+    "cybersecurity": (
+        "cybersecurity",
+        "cyber security",
+        "information security",
+        "network security",
+    ),
+
+    "construction": (
+        "construction",
+        "civil works",
+        "building works",
+        "infrastructure",
+    ),
+
+    "engineering": (
+        "engineering",
+        "engineering services",
+        "engineering consultancy",
+        "technical engineering",
+    ),
+
+    "accounting": (
+        "accounting",
+        "bookkeeping",
+        "financial reporting",
+        "finance services",
+    ),
+
+    "audit": (
+        "audit",
+        "auditing",
+        "assurance",
+        "external audit",
+        "internal audit",
+    ),
+
+    "tax": (
+        "tax",
+        "taxation",
+        "tax advisory",
+        "tax compliance",
+    ),
+
+    "consulting": (
+        "consulting",
+        "consultancy",
+        "advisory",
+        "technical assistance",
+    ),
+
+    "consultancy": (
+        "consulting",
+        "consultancy",
+        "advisory",
+        "technical assistance",
+    ),
+
+    "training": (
+        "training",
+        "capacity building",
+        "coaching",
+        "workshop facilitation",
+    ),
+
+    "recruitment": (
+        "recruitment",
+        "staffing",
+        "executive search",
+        "headhunting",
+    ),
+
+    "marketing": (
+        "marketing",
+        "advertising",
+        "branding",
+        "communications",
+        "public relations",
+    ),
+
+    "logistics": (
+        "logistics",
+        "transport",
+        "freight",
+        "shipping",
+    ),
+
+    "health": (
+        "health",
+        "healthcare",
+        "medical",
+        "hospital",
+    ),
+
+    "healthcare": (
+        "health",
+        "healthcare",
+        "medical",
+        "hospital",
+    ),
+
+    "agriculture": (
+        "agriculture",
+        "agricultural",
+        "farming",
+        "farm",
+    ),
+
+    "energy": (
+        "energy",
+        "electricity",
+        "solar",
+        "renewable energy",
+        "power",
+    ),
+}
 
 
-JOB_TYPE_TERMS: tuple[str, ...] = (
-    "job",
-    "vacancy",
-    "career opportunity",
-    "employment",
-    "vacant position",
-)
+COUNTRY_ALIASES: dict[str, tuple[str, ...]] = {
+    "rwanda": (
+        "rwanda",
+        "rwandan",
+    ),
+
+    "kenya": (
+        "kenya",
+        "kenyan",
+    ),
+
+    "uganda": (
+        "uganda",
+        "ugandan",
+    ),
+
+    "tanzania": (
+        "tanzania",
+        "tanzanian",
+    ),
+
+    "burundi": (
+        "burundi",
+        "burundian",
+    ),
+
+    "ethiopia": (
+        "ethiopia",
+        "ethiopian",
+    ),
+
+    "ghana": (
+        "ghana",
+        "ghanaian",
+    ),
+
+    "nigeria": (
+        "nigeria",
+        "nigerian",
+    ),
+
+    "south africa": (
+        "south africa",
+        "south african",
+    ),
+
+    "zambia": (
+        "zambia",
+        "zambian",
+    ),
+
+    "zimbabwe": (
+        "zimbabwe",
+        "zimbabwean",
+    ),
+
+    "malawi": (
+        "malawi",
+        "malawian",
+    ),
+
+    "mozambique": (
+        "mozambique",
+        "mozambican",
+    ),
+
+    "botswana": (
+        "botswana",
+        "botswanan",
+    ),
+
+    "namibia": (
+        "namibia",
+        "namibian",
+    ),
+
+    "senegal": (
+        "senegal",
+        "senegalese",
+    ),
+
+    "cameroon": (
+        "cameroon",
+        "cameroonian",
+    ),
+
+    "cote d ivoire": (
+        "cote d ivoire",
+        "ivory coast",
+        "ivorian",
+    ),
+}
+
+
+COUNTRY_DOMAIN_HINTS: dict[str, tuple[str, ...]] = {
+    "rwanda": (
+        ".rw",
+    ),
+
+    "kenya": (
+        ".ke",
+    ),
+
+    "uganda": (
+        ".ug",
+    ),
+
+    "tanzania": (
+        ".tz",
+    ),
+
+    "burundi": (
+        ".bi",
+    ),
+
+    "ethiopia": (
+        ".et",
+    ),
+
+    "ghana": (
+        ".gh",
+    ),
+
+    "nigeria": (
+        ".ng",
+    ),
+
+    "south africa": (
+        ".za",
+    ),
+
+    "zambia": (
+        ".zm",
+    ),
+
+    "zimbabwe": (
+        ".zw",
+    ),
+
+    "malawi": (
+        ".mw",
+    ),
+
+    "mozambique": (
+        ".mz",
+    ),
+
+    "botswana": (
+        ".bw",
+    ),
+
+    "namibia": (
+        ".na",
+    ),
+
+    "senegal": (
+        ".sn",
+    ),
+
+    "cameroon": (
+        ".cm",
+    ),
+
+    "cote d ivoire": (
+        ".ci",
+    ),
+}
+
+
+REGION_ALIASES: dict[str, tuple[str, ...]] = {
+    "east africa": (
+        "east africa",
+        "eastern africa",
+        "east african",
+    ),
+
+    "west africa": (
+        "west africa",
+        "western africa",
+        "west african",
+    ),
+
+    "southern africa": (
+        "southern africa",
+        "south african region",
+    ),
+
+    "central africa": (
+        "central africa",
+        "central african",
+    ),
+
+    "africa": (
+        "africa",
+        "african",
+    ),
+
+    "east african community": (
+        "east african community",
+        "eac",
+    ),
+}
 
 
 # ==========================================================
@@ -895,6 +1417,64 @@ def build_filtered_searchable_text(
     )
 
 
+def aliases_for_business_term(
+    value: str,
+) -> tuple[str, ...]:
+    clean_value = normalise_text(
+        value
+    )
+
+    if not clean_value:
+        return ()
+
+    aliases = BUSINESS_TERM_ALIASES.get(
+        clean_value
+    )
+
+    if aliases:
+        return aliases
+
+    return (
+        clean_value,
+    )
+
+
+def matching_business_terms(
+    text: str,
+    values: tuple[str, ...],
+) -> list[str]:
+    matched: list[str] = []
+
+    for configured_value in values:
+        clean_value = normalise_text(
+            configured_value
+        )
+
+        if not clean_value:
+            continue
+
+        aliases = aliases_for_business_term(
+            clean_value
+        )
+
+        if any(
+            contains_term(
+                text,
+                alias,
+            )
+            for alias in aliases
+        ):
+            matched.append(
+                configured_value
+            )
+
+    return sorted(
+        set(
+            matched
+        )
+    )
+
+
 # ==========================================================
 # DOCUMENT DETECTION
 # ==========================================================
@@ -964,8 +1544,7 @@ def aggregate_listing_reason(
 
     repeated_markers = sorted(
         marker
-        for marker
-        in AGGREGATE_REPEATED_MARKERS
+        for marker in AGGREGATE_REPEATED_MARKERS
         if description.count(
             marker
         ) >= 2
@@ -1008,6 +1587,8 @@ def aggregate_listing_reason(
 def calculate_opportunity_confidence(
     *,
     strong_procurement: list[str],
+    title_notice_matches: list[str],
+    title_prefix_match: bool,
     abbreviations: list[str],
     submission_actions: list[str],
     metadata: list[str],
@@ -1017,21 +1598,21 @@ def calculate_opportunity_confidence(
     generic_page_matches: list[str],
     employment_matches: list[str],
 ) -> int:
-    """
-    Determine whether this appears to be a real opportunity.
-
-    This score is intentionally independent of the sector
-    or type of business that may eventually pursue it.
-    """
-
     score = 0
 
+    # Explicit notice language in the title is the strongest evidence that
+    # the page is an individual opportunity rather than a generic website.
     score += min(
-        40,
-        len(
-            strong_procurement
-        )
-        * 20,
+        55,
+        len(title_notice_matches) * 35,
+    )
+
+    if title_prefix_match:
+        score += 35
+
+    score += min(
+        35,
+        len(strong_procurement) * 15,
     )
 
     score += min(
@@ -1070,7 +1651,7 @@ def calculate_opportunity_confidence(
         score += 10
 
     if document_evidence:
-        score += 20
+        score += 25
 
     if generic_page_matches:
         score -= min(
@@ -1188,6 +1769,231 @@ def classify_category(
 
 
 # ==========================================================
+# OPPORTUNITY TYPE DETECTION
+# ==========================================================
+
+
+def detect_opportunity_types(
+    text: str,
+) -> set[str]:
+    detected: set[str] = set()
+
+    for opportunity_type, terms in (
+        OPPORTUNITY_TYPE_RULES.items()
+    ):
+        if find_matches(
+            text,
+            terms,
+        ):
+            detected.add(
+                opportunity_type
+            )
+
+    return detected
+
+
+def opportunity_type_summary(
+    detected_types: set[str],
+) -> str:
+    if not detected_types:
+        return ""
+
+    priority_order = (
+        "RFP",
+        "RFQ",
+        "EOI",
+        "Tender",
+        "Supplier Registration",
+        "Framework Agreement",
+        "Grant",
+        "Partnership",
+        "Job",
+    )
+
+    ordered = [
+        item
+        for item in priority_order
+        if item in detected_types
+    ]
+
+    return ", ".join(
+        ordered
+    )
+
+
+def informational_or_directory_page_reason(
+    opportunity: RawOpportunity,
+    *,
+    title: str,
+    title_notice_matches: list[str],
+    title_prefix_match: bool,
+    submission_actions: list[str],
+    metadata: list[str],
+    deadline_present: bool,
+    document_evidence: bool,
+) -> str | None:
+    """
+    Reject directories, training pages and explanatory articles that contain
+    tender/procurement vocabulary but are not individual live notices.
+    """
+    raw_url = str(getattr(opportunity, "source_url", "") or "").lower()
+    title_info_matches = find_matches(
+        title,
+        INFORMATIONAL_OR_DIRECTORY_TITLE_TERMS,
+    )
+    url_info_matches = [
+        term
+        for term in INFORMATIONAL_URL_TERMS
+        if term in raw_url
+    ]
+
+    strong_individual_evidence = bool(
+        title_notice_matches
+        or title_prefix_match
+        or submission_actions
+        or metadata
+        or deadline_present
+        or document_evidence
+    )
+
+    # Training/course pages are never procurement notices merely because the
+    # course teaches procurement, bidding or tendering.
+    if any(
+        term in title
+        for term in (
+            "training course",
+            "training program",
+            "training programme",
+            "course on",
+        )
+    ):
+        return "training/course page rather than an opportunity notice"
+
+    # Career and job-index pages should not become procurement opportunities.
+    if any(
+        term in raw_url
+        for term in (
+            "/careers",
+            "/jobs-list",
+        )
+    ) and not title_notice_matches:
+        return "career/job listing page rather than a procurement opportunity"
+
+    # Generic tender directories and explainer pages require stronger
+    # individual-notice evidence than the word tender/RFP alone.
+    if title_info_matches and not (
+        submission_actions
+        or deadline_present
+        or document_evidence
+    ):
+        return (
+            "informational/directory page rather than an individual notice "
+            f"(indicators: {', '.join(title_info_matches)})"
+        )
+
+    if (
+        url_info_matches
+        and not strong_individual_evidence
+    ):
+        return (
+            "informational/directory URL without individual notice evidence"
+        )
+
+    return None
+
+
+def commercial_service_page_reason(
+    opportunity: RawOpportunity,
+    *,
+    text: str,
+    strong_procurement: list[str],
+    submission_actions: list[str],
+    document_evidence: bool,
+    detected_types: set[str],
+    deadline_present: bool,
+) -> str | None:
+    """
+    Reject ordinary company/service/SEO pages that happen to contain
+    procurement-adjacent vocabulary.
+
+    Real notices are protected by explicit procurement, submission,
+    document, deadline or opportunity-type evidence.
+    """
+    title_raw = str(getattr(opportunity, "title", "") or "")
+    title = normalise_text(title_raw)
+    description = normalise_text(
+        getattr(opportunity, "description", "") or ""
+    )
+
+    # Strong real-notice evidence wins.
+    if (
+        strong_procurement
+        or submission_actions
+        or document_evidence
+        or deadline_present
+        or detected_types.intersection(TENDER_LIKE_TYPES)
+        or {"Grant", "Partnership"}.intersection(detected_types)
+    ):
+        return None
+
+    commercial_matches = find_matches(
+        text,
+        COMMERCIAL_SERVICE_PAGE_TERMS,
+    )
+
+    title_marketing_matches = [
+        term
+        for term in COMMERCIAL_TITLE_PATTERNS
+        if contains_term(title, term)
+    ]
+
+    seo_separator_count = sum(
+        title_raw.count(separator)
+        for separator in SEO_TITLE_SEPARATORS
+    )
+
+    # Titles listing multiple services are characteristic of landing/SEO pages,
+    # not individual procurement notices.
+    if (
+        seo_separator_count >= 2
+        and (
+            commercial_matches
+            or title_marketing_matches
+        )
+    ):
+        return (
+            "commercial/SEO service page detected "
+            "(multi-service marketing title without procurement evidence)"
+        )
+
+    if title_marketing_matches and not deadline_present:
+        return (
+            "commercial service page detected "
+            f"(title indicators: {', '.join(sorted(set(title_marketing_matches)))})"
+        )
+
+    if len(commercial_matches) >= 2 and not deadline_present:
+        return (
+            "commercial service page detected "
+            f"(marketing indicators: {', '.join(commercial_matches[:4])})"
+        )
+
+    # Generic descriptive service pages often have long promotional copy
+    # without any submission mechanics.
+    if (
+        len(description) >= 500
+        and commercial_matches
+        and not submission_actions
+    ):
+        return (
+            "promotional service page detected without bid/proposal "
+            "submission instructions"
+        )
+
+    return None
+
+
+# ==========================================================
 # GLOBAL CLASSIFIER
 # ==========================================================
 
@@ -1287,16 +2093,70 @@ def classify_opportunity_with_reason(
         )
     )
 
+    detected_types = (
+        detect_opportunity_types(
+            text
+        )
+    )
+
+    title_notice_matches = find_matches(
+        title,
+        STRONG_NOTICE_TITLE_TERMS,
+    )
+
+    title_prefix_match = any(
+        title.startswith(normalise_text(prefix))
+        for prefix in TITLE_NOTICE_PREFIXES
+    )
+
+    informational_reason = informational_or_directory_page_reason(
+        opportunity,
+        title=title,
+        title_notice_matches=title_notice_matches,
+        title_prefix_match=title_prefix_match,
+        submission_actions=submission_actions,
+        metadata=metadata,
+        deadline_present=deadline_present,
+        document_evidence=document_evidence,
+    )
+
+    if informational_reason is not None:
+        return ClassificationDecision(
+            opportunity=None,
+            rejection_reason=informational_reason,
+        )
+
+    commercial_reason = commercial_service_page_reason(
+        opportunity,
+        text=text,
+        strong_procurement=strong_procurement,
+        submission_actions=submission_actions,
+        document_evidence=document_evidence,
+        detected_types=detected_types,
+        deadline_present=deadline_present,
+    )
+
+    if commercial_reason is not None:
+        return ClassificationDecision(
+            opportunity=None,
+            rejection_reason=commercial_reason,
+        )
+
     has_procurement_evidence = bool(
-        strong_procurement
+        title_notice_matches
+        or title_prefix_match
+        or strong_procurement
         or submission_actions
         or document_evidence
+        or detected_types
         or (
             metadata
-            and (
-                firm_matches
-                or abbreviations
-            )
+            and abbreviations
+        )
+        or (
+            metadata
+            and firm_matches
+            and deadline_present
         )
         or (
             deadline_present
@@ -1322,8 +2182,7 @@ def classify_opportunity_with_reason(
         == normalise_text(
             generic_title
         )
-        for generic_title
-        in GENERIC_TITLES
+        for generic_title in GENERIC_TITLES
     )
 
     if (
@@ -1345,11 +2204,15 @@ def classify_opportunity_with_reason(
             ),
         )
 
-    if employment_matches and not (
-        strong_procurement
-        or submission_actions
-        or document_evidence
-        or firm_matches
+    if (
+        employment_matches
+        and "Job" not in detected_types
+        and not (
+            strong_procurement
+            or submission_actions
+            or document_evidence
+            or firm_matches
+        )
     ):
         return ClassificationDecision(
             opportunity=None,
@@ -1363,6 +2226,12 @@ def classify_opportunity_with_reason(
         calculate_opportunity_confidence(
             strong_procurement=(
                 strong_procurement
+            ),
+            title_notice_matches=(
+                title_notice_matches
+            ),
+            title_prefix_match=(
+                title_prefix_match
             ),
             abbreviations=(
                 abbreviations
@@ -1411,6 +2280,25 @@ def classify_opportunity_with_reason(
     )
 
     reason_parts: list[str] = []
+
+    if title_notice_matches:
+        reason_parts.append(
+            "notice title: " + ", ".join(title_notice_matches)
+        )
+
+    if title_prefix_match:
+        reason_parts.append("explicit opportunity title")
+
+    type_summary = (
+        opportunity_type_summary(
+            detected_types
+        )
+    )
+
+    if type_summary:
+        reason_parts.append(
+            f"type: {type_summary}"
+        )
 
     reason_parts.extend(
         strong_procurement
@@ -1501,67 +2389,240 @@ def filter_opportunity(
 
 
 # ==========================================================
-# BUSINESS PROFILE MATCHING
+# LOCATION MATCHING
 # ==========================================================
 
 
-def _matching_terms(
+def match_countries(
     text: str,
-    values: tuple[str, ...],
+    source_url: str,
+    countries: tuple[str, ...],
 ) -> list[str]:
-    return sorted(
-        {
-            value
-            for value in values
-            if (
-                value
-                and contains_term(
-                    text,
-                    value,
-                )
+    matched: list[str] = []
+
+    hostname = (
+        urlparse(
+            source_url or ""
+        )
+        .hostname
+        or ""
+    ).lower()
+
+    for configured_country in countries:
+        key = normalise_text(
+            configured_country
+        )
+
+        if not key:
+            continue
+
+        aliases = COUNTRY_ALIASES.get(
+            key,
+            (
+                key,
+            ),
+        )
+
+        literal_match = any(
+            contains_term(
+                text,
+                alias,
             )
-        }
+            for alias in aliases
+        )
+
+        domain_match = any(
+            hostname.endswith(
+                suffix
+            )
+            for suffix in COUNTRY_DOMAIN_HINTS.get(
+                key,
+                (),
+            )
+        )
+
+        if (
+            literal_match
+            or domain_match
+        ):
+            matched.append(
+                configured_country
+            )
+
+    return sorted(
+        set(
+            matched
+        )
     )
 
 
-def detect_opportunity_types(
+def match_regions(
     text: str,
-) -> set[str]:
-    detected: set[str] = set()
+    regions: tuple[str, ...],
+) -> list[str]:
+    matched: list[str] = []
 
-    if find_matches(
-        text,
-        TENDER_TYPE_TERMS,
-    ):
-        detected.add(
-            "tender"
+    for configured_region in regions:
+        key = normalise_text(
+            configured_region
         )
 
-    if find_matches(
-        text,
-        GRANT_TYPE_TERMS,
-    ):
-        detected.add(
-            "grant"
+        if not key:
+            continue
+
+        aliases = REGION_ALIASES.get(
+            key,
+            (
+                key,
+            ),
         )
 
-    if find_matches(
-        text,
-        PARTNERSHIP_TYPE_TERMS,
-    ):
-        detected.add(
-            "partnership"
+        if any(
+            contains_term(
+                text,
+                alias,
+            )
+            for alias in aliases
+        ):
+            matched.append(
+                configured_region
+            )
+
+    return sorted(
+        set(
+            matched
+        )
+    )
+
+
+# ==========================================================
+# BUSINESS OPPORTUNITY TYPE MATCHING
+# ==========================================================
+
+
+def requested_type_matches(
+    configured_types: tuple[str, ...],
+    detected_types: set[str],
+) -> list[str]:
+    matched: list[str] = []
+
+    normalized_detected = {
+        normalise_text(
+            item
+        )
+        for item in detected_types
+    }
+
+    for configured in configured_types:
+        clean = normalise_text(
+            configured
         )
 
-    if find_matches(
-        text,
-        JOB_TYPE_TERMS,
-    ):
-        detected.add(
-            "job"
-        )
+        if not clean:
+            continue
 
-    return detected
+        aliases: set[str] = {
+            clean
+        }
+
+        if clean in {
+            "tender",
+            "tenders",
+            "procurement",
+        }:
+            aliases.update(
+                normalise_text(
+                    item
+                )
+                for item in TENDER_LIKE_TYPES
+            )
+
+        elif clean in {
+            "request for proposal",
+            "rfp",
+        }:
+            aliases.add(
+                "rfp"
+            )
+
+        elif clean in {
+            "request for quotation",
+            "rfq",
+        }:
+            aliases.add(
+                "rfq"
+            )
+
+        elif clean in {
+            "expression of interest",
+            "eoi",
+        }:
+            aliases.add(
+                "eoi"
+            )
+
+        elif clean in {
+            "grant",
+            "grants",
+            "funding",
+        }:
+            aliases.add(
+                "grant"
+            )
+
+        elif clean in {
+            "partnership",
+            "partnerships",
+        }:
+            aliases.add(
+                "partnership"
+            )
+
+        elif clean in {
+            "job",
+            "jobs",
+            "career",
+            "careers",
+        }:
+            aliases.add(
+                "job"
+            )
+
+        elif clean in {
+            "supplier",
+            "supplier registration",
+            "vendor registration",
+            "prequalification",
+        }:
+            aliases.add(
+                "supplier registration"
+            )
+
+        elif clean in {
+            "framework",
+            "framework agreement",
+        }:
+            aliases.add(
+                "framework agreement"
+            )
+
+        if aliases.intersection(
+            normalized_detected
+        ):
+            matched.append(
+                configured
+            )
+
+    return sorted(
+        set(
+            matched
+        )
+    )
+
+
+# ==========================================================
+# BUSINESS PROFILE MATCHING
+# ==========================================================
 
 
 def score_for_business(
@@ -1569,10 +2630,10 @@ def score_for_business(
     preferences: BusinessMatchPreferences,
 ) -> BusinessMatchResult:
     """
-    Produce the business-specific relevance score.
+    Score one valid global opportunity against one business.
 
-    The stored/global match_score represents opportunity
-    quality. This score adds relevance for one business.
+    Global procurement confidence and business relevance
+    deliberately remain separate concepts.
     """
 
     text = (
@@ -1581,33 +2642,15 @@ def score_for_business(
         )
     )
 
-    base_score = int(
-        opportunity.match_score
-        or 0
-    )
-
-    #
-    # Do not let high global procurement confidence
-    # automatically become a high business relevance score.
-    #
-    # Up to 40 points come from opportunity quality.
-    #
-    score = round(
-        base_score
-        * 0.40
-    )
-
-    reasons: list[str] = []
-
-    # ------------------------------------------------------
-    # TYPE EXCLUSIONS
-    # ------------------------------------------------------
-
     detected_types = (
         detect_opportunity_types(
             text
         )
     )
+
+    # ------------------------------------------------------
+    # USER TYPE EXCLUSIONS
+    # ------------------------------------------------------
 
     if (
         opportunity.deadline is None
@@ -1616,216 +2659,244 @@ def score_for_business(
         return BusinessMatchResult(
             score=0,
             reason=(
-                "Hidden because opportunities without "
+                "Hidden: opportunities without "
                 "deadlines are disabled."
             ),
             is_visible=False,
         )
 
     if (
-        "job" in detected_types
+        "Job" in detected_types
         and not preferences.include_jobs
     ):
         return BusinessMatchResult(
             score=0,
             reason=(
-                "Hidden because jobs are disabled."
+                "Hidden: jobs are disabled."
             ),
             is_visible=False,
         )
 
     if (
-        "grant" in detected_types
+        "Grant" in detected_types
         and not preferences.include_grants
     ):
         return BusinessMatchResult(
             score=0,
             reason=(
-                "Hidden because grants are disabled."
+                "Hidden: grants are disabled."
             ),
             is_visible=False,
         )
 
     if (
-        "partnership" in detected_types
+        "Partnership" in detected_types
         and not preferences.include_partnerships
     ):
         return BusinessMatchResult(
             score=0,
             reason=(
-                "Hidden because partnerships are disabled."
+                "Hidden: partnerships are disabled."
             ),
             is_visible=False,
         )
 
     if (
-        "tender" in detected_types
+        detected_types.intersection(
+            TENDER_LIKE_TYPES
+        )
         and not preferences.include_tenders
     ):
         return BusinessMatchResult(
             score=0,
             reason=(
-                "Hidden because tenders are disabled."
+                "Hidden: tenders and procurement "
+                "opportunities are disabled."
             ),
             is_visible=False,
         )
 
     # ------------------------------------------------------
-    # BUSINESS RELEVANCE
+    # MATCH BUSINESS PROFILE
     # ------------------------------------------------------
 
-    countries = _matching_terms(
+    country_matches = match_countries(
         text,
+        opportunity.source_url,
         preferences.countries,
     )
 
-    regions = _matching_terms(
+    region_matches = match_regions(
         text,
         preferences.regions,
     )
 
-    industries = _matching_terms(
-        text,
-        preferences.industries,
-    )
-
-    services = _matching_terms(
-        text,
-        preferences.services,
-    )
-
-    keywords = _matching_terms(
-        text,
-        preferences.keywords,
-    )
-
-    requested_types = (
-        _matching_terms(
+    industry_matches = (
+        matching_business_terms(
             text,
-            preferences.opportunity_types,
+            preferences.industries,
         )
     )
 
-    if countries:
-        score += min(
-            10,
-            6
-            + (
-                len(countries)
-                - 1
-            )
-            * 2,
+    service_matches = (
+        matching_business_terms(
+            text,
+            preferences.services,
         )
+    )
 
-        reasons.append(
-            "country: "
-            + ", ".join(
-                countries
-            )
+    keyword_matches = (
+        matching_business_terms(
+            text,
+            preferences.keywords,
         )
+    )
 
-    if regions:
-        score += min(
-            5,
-            len(
-                regions
-            )
-            * 3,
+    type_matches = (
+        requested_type_matches(
+            preferences.opportunity_types,
+            detected_types,
         )
-
-        reasons.append(
-            "region: "
-            + ", ".join(
-                regions
-            )
-        )
-
-    if industries:
-        score += min(
-            15,
-            len(
-                industries
-            )
-            * 8,
-        )
-
-        reasons.append(
-            "industry: "
-            + ", ".join(
-                industries
-            )
-        )
-
-    if services:
-        score += min(
-            30,
-            len(
-                services
-            )
-            * 15,
-        )
-
-        reasons.append(
-            "service: "
-            + ", ".join(
-                services
-            )
-        )
-
-    if keywords:
-        score += min(
-            30,
-            len(
-                keywords
-            )
-            * 10,
-        )
-
-        reasons.append(
-            "keyword: "
-            + ", ".join(
-                keywords
-            )
-        )
-
-    if requested_types:
-        score += min(
-            10,
-            len(
-                requested_types
-            )
-            * 5,
-        )
-
-        reasons.append(
-            "opportunity type: "
-            + ", ".join(
-                requested_types
-            )
-        )
+    )
 
     # ------------------------------------------------------
-    # CATEGORY SIGNAL
+    # CATEGORY MATCHING
     # ------------------------------------------------------
 
     category_text = normalise_text(
         opportunity.category
     )
 
-    category_business_terms = (
-        preferences.industries
-        + preferences.services
+    category_matches = (
+        matching_business_terms(
+            category_text,
+            (
+                preferences.industries
+                + preferences.services
+            ),
+        )
     )
 
-    category_matches = [
-        term
-        for term
-        in category_business_terms
-        if contains_term(
-            category_text,
-            term,
+    # ------------------------------------------------------
+    # BUSINESS RELEVANCE SCORE
+    # ------------------------------------------------------
+
+    base_quality = int(
+        opportunity.match_score
+        or 0
+    )
+
+    #
+    # Global confidence contributes only 15 points.
+    # A great procurement notice is not automatically
+    # a great match for every business.
+    #
+    score = round(
+        base_quality
+        * 0.15
+    )
+
+    reasons: list[str] = []
+
+    if country_matches:
+        score += min(
+            15,
+            10
+            + (
+                len(
+                    country_matches
+                )
+                - 1
+            )
+            * 3,
         )
-    ]
+
+        reasons.append(
+            "Market match: "
+            + ", ".join(
+                country_matches
+            )
+        )
+
+    if region_matches:
+        score += min(
+            8,
+            len(
+                region_matches
+            )
+            * 5,
+        )
+
+        reasons.append(
+            "Region match: "
+            + ", ".join(
+                region_matches
+            )
+        )
+
+    if industry_matches:
+        score += min(
+            20,
+            len(
+                industry_matches
+            )
+            * 12,
+        )
+
+        reasons.append(
+            "Industry match: "
+            + ", ".join(
+                industry_matches
+            )
+        )
+
+    if service_matches:
+        score += min(
+            35,
+            len(
+                service_matches
+            )
+            * 20,
+        )
+
+        reasons.append(
+            "Service match: "
+            + ", ".join(
+                service_matches
+            )
+        )
+
+    if keyword_matches:
+        score += min(
+            30,
+            len(
+                keyword_matches
+            )
+            * 12,
+        )
+
+        reasons.append(
+            "Keyword match: "
+            + ", ".join(
+                keyword_matches
+            )
+        )
+
+    if type_matches:
+        score += min(
+            15,
+            len(
+                type_matches
+            )
+            * 8,
+        )
+
+        reasons.append(
+            "Opportunity type: "
+            + ", ".join(
+                type_matches
+            )
+        )
 
     if category_matches:
         score += min(
@@ -1833,15 +2904,52 @@ def score_for_business(
             len(
                 category_matches
             )
-            * 8,
+            * 10,
         )
 
         reasons.append(
-            "category: "
+            "Category match: "
             + ", ".join(
                 category_matches
             )
         )
+
+    # ------------------------------------------------------
+    # PENALIZE ZERO BUSINESS RELEVANCE
+    # ------------------------------------------------------
+
+    business_match_count = sum(
+        bool(matches)
+        for matches in (
+            country_matches,
+            region_matches,
+            industry_matches,
+            service_matches,
+            keyword_matches,
+            type_matches,
+            category_matches,
+        )
+    )
+
+    if business_match_count == 0:
+        score = min(
+            score,
+            15,
+        )
+
+        reasons.append(
+            "No Business Profile relevance signals matched."
+        )
+
+    elif business_match_count == 1:
+        score = min(
+            score,
+            55,
+        )
+
+    # ------------------------------------------------------
+    # RESULT
+    # ------------------------------------------------------
 
     score = max(
         0,
@@ -1851,12 +2959,6 @@ def score_for_business(
         ),
     )
 
-    if not reasons:
-        reasons.append(
-            "No strong business-profile relevance "
-            "signals matched."
-        )
-
     is_visible = (
         score
         >= preferences.minimum_match_score
@@ -1864,7 +2966,7 @@ def score_for_business(
 
     if not is_visible:
         reasons.append(
-            "Below business minimum score "
+            "Below Business Profile minimum score "
             f"of {preferences.minimum_match_score}."
         )
 

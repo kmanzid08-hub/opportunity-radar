@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Sources | Opportunity Radar</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=8">
+</head>
+
+<body>
+
+    <header class="app-header">
+
+        <div class="app-header-inner">
+
+            <a href="/" class="brand">
+
+                <span class="brand-mark">
+                    OR
+                </span>
+
+                <span>
+                    <strong>Opportunity Radar</strong>
+
+                    <small>
+                        Business opportunity intelligence
+                    </small>
+                </span>
+
+            </a>
+
+
+            <div class="topbar-actions">
+
+                <nav class="main-nav">
+
+                    <a href="/" class="nav-link">
+                        Discover
+                    </a>
+
+                    <a href="/pipeline" class="nav-link">
+                        Pipeline
+                    </a>
+
+                    <a href="/?deadline_filter=archived" class="nav-link">
+                        Archived
+                    </a>
+
+                    <a href="/sources" class="nav-link active">
+                        Sources
+                    </a>
+
+                    <a href="/business-profile" class="nav-link">
+                        Business Profile
+                    </a>
+
+                </nav>
+
+            </div>
+
+        </div>
+
+    </header>
+
+
+    <main class="discover-shell">
+
+        <section class="discover-hero">
+
+            <div>
+
+                <p class="eyebrow">
+                    DISCOVERY NETWORK
+                </p>
+
+                <h1>
+                    Sources
+                </h1>
+
+                <p class="hero-copy">
+                    Review and control the websites Opportunity Radar
+                    monitors for new opportunities.
+                </p>
+
+            </div>
+
+        </section>
+
+
+        <section class="primary-metrics">
+
+            <div class="metric-card">
+
+                <span class="metric-label">
+                    Total sources
+                </span>
+
+                <strong>
+                    {{ source_count }}
+                </strong>
+
+                <span class="metric-note">
+                    Discovered websites
+                </span>
+
+            </div>
+
+
+            <div class="metric-card">
+
+                <span class="metric-label">
+                    Active
+                </span>
+
+                <strong>
+                    {{ active_count }}
+                </strong>
+
+                <span class="metric-note">
+                    Currently monitored
+                </span>
+
+            </div>
+
+
+            <div class="metric-card">
+
+                <span class="metric-label">
+                    Disabled
+                </span>
+
+                <strong>
+                    {{ disabled_count }}
+                </strong>
+
+                <span class="metric-note">
+                    Not being scanned
+                </span>
+
+            </div>
+
+
+            <div class="metric-card">
+
+                <span class="metric-label">
+                    Auto disabled
+                </span>
+
+                <strong>
+                    {{ auto_disabled_count }}
+                </strong>
+
+                <span class="metric-note">
+                    Repeated failures
+                </span>
+
+            </div>
+
+        </section>
+
+
+        <section class="operations-strip">
+
+            <div>
+
+                <span>
+                    Opportunities found
+                </span>
+
+                <strong>
+                    {{ total_opportunities_found }}
+                </strong>
+
+            </div>
+
+            <div>
+
+                <span>
+                    Showing
+                </span>
+
+                <strong>
+                    {{ filtered_count }}
+                </strong>
+
+            </div>
+
+        </section>
+
+
+        <section class="discovery-toolbar">
+
+            <form action="/sources" method="get" class="discover-filter-form">
+
+                <div class="search-control">
+
+                    <label for="q">
+                        Search sources
+                    </label>
+
+                    <div class="search-input-wrap">
+
+                        <input id="q" name="q" type="search" value="{{ selected_q }}"
+                            placeholder="Organisation, domain or source type">
+
+                    </div>
+
+                </div>
+
+
+                <div class="compact-filter">
+
+                    <label for="status">
+                        Status
+                    </label>
+
+                    <select id="status" name="status">
+
+                        <option value="">
+                            All sources
+                        </option>
+
+                        <option value="active" {% if selected_status=="active" %} selected {% endif %}>
+                            Active
+                        </option>
+
+                        <option value="disabled" {% if selected_status=="disabled" %} selected {% endif %}>
+                            Disabled
+                        </option>
+
+                        <option value="auto_disabled" {% if selected_status=="auto_disabled" %} selected {% endif %}>
+                            Auto disabled
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <div class="discover-filter-actions">
+
+                    <button type="submit" class="primary-button">
+                        Apply
+                    </button>
+
+                    <a href="/sources" class="ghost-button">
+                        Clear
+                    </a>
+
+                </div>
+
+            </form>
+
+        </section>
+
+
+        <section class="results-toolbar">
+
+            <div>
+
+                <p class="eyebrow">
+                    MONITORING NETWORK
+                </p>
+
+                <div class="results-title-row">
+
+                    <h2>
+                        Discovered websites
+                    </h2>
+
+                    <span class="results-count">
+                        {{ filtered_count }}
+                    </span>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        {% if sources %}
+
+        <section class="opportunity-feed">
+
+            {% for source in sources %}
+
+            <article class="discover-card">
+
+                <div class="score-column">
+
+                    <div class="match-score">
+
+                        <strong>
+                            {{ source.priority_score or 0 }}
+                        </strong>
+
+                        <span>
+                            priority
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+                <div class="discover-card-main">
+
+                    <div class="badge-row compact-badges">
+
+                        <span class="badge category-badge">
+
+                            {{
+                            source.source_type
+                            or "Organisation"
+                            }}
+
+                        </span>
+
+
+                        {% if source.is_auto_disabled %}
+
+                        <span class="badge expired-badge">
+                            Auto disabled
+                        </span>
+
+                        {% elif source.is_active %}
+
+                        <span class="badge pipeline-badge">
+                            Active
+                        </span>
+
+                        {% else %}
+
+                        <span class="badge expired-badge">
+                            Disabled
+                        </span>
+
+                        {% endif %}
+
+                    </div>
+
+
+                    <h3 class="discover-title">
+
+                        {{
+                        source.organisation_name
+                        or source.domain
+                        }}
+
+                    </h3>
+
+
+                    <p class="discover-organisation">
+                        {{ source.domain }}
+                    </p>
+
+
+                    <div class="card-metadata">
+
+                        <div class="metadata-item">
+
+                            <span class="metadata-label">
+                                Confidence
+                            </span>
+
+                            <strong>
+                                {{ source.confidence_score or 0 }}
+                            </strong>
+
+                        </div>
+
+
+                        <div class="metadata-item">
+
+                            <span class="metadata-label">
+                                Opportunities
+                            </span>
+
+                            <strong>
+                                {{
+                                source.total_opportunities_found
+                                or 0
+                                }}
+                            </strong>
+
+                        </div>
+
+
+                        <div class="metadata-item">
+
+                            <span class="metadata-label">
+                                Failures
+                            </span>
+
+                            <strong>
+                                {{
+                                source.consecutive_failures
+                                or 0
+                                }}
+                            </strong>
+
+                        </div>
+
+
+                        <div class="metadata-item">
+
+                            <span class="metadata-label">
+                                Last scan
+                            </span>
+
+                            <strong>
+
+                                {% if source.last_scanned_at %}
+
+                                {{ source.last_scanned_at }}
+
+                                {% else %}
+
+                                Never
+
+                                {% endif %}
+
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+
+                    <p class="source-link">
+                        {{ source.monitor_url }}
+                    </p>
+
+
+                    {% if source.disabled_reason %}
+
+                    <p>
+                        <strong>
+                            Disabled:
+                        </strong>
+
+                        {{ source.disabled_reason }}
+                    </p>
+
+                    {% endif %}
+
+                </div>
+
+
+                <div class="discover-card-actions">
+
+                    <a href="{{ source.monitor_url }}" target="_blank" rel="noopener noreferrer" class="primary-button">
+                        Open website ↗
+                    </a>
+
+
+                    {% if source.is_active %}
+
+                    <form action="/sources/{{ source.id }}/disable" method="post">
+
+                        <button type="submit" class="ghost-button">
+                            Disable
+                        </button>
+
+                    </form>
+
+                    {% else %}
+
+                    <form action="/sources/{{ source.id }}/enable" method="post">
+
+                        <button type="submit" class="secondary-button">
+                            Enable
+                        </button>
+
+                    </form>
+
+                    {% endif %}
+
+                </div>
+
+            </article>
+
+            {% endfor %}
+
+        </section>
+
+
+        {% else %}
+
+        <section class="empty-state modern-empty-state">
+
+            <h3>
+                No sources found
+            </h3>
+
+            <p>
+                Run Website Discovery or clear the current filters.
+            </p>
+
+            <a href="/sources" class="primary-button">
+                Clear filters
+            </a>
+
+        </section>
+
+        {% endif %}
+
+    </main>
+
+</body>
+
+</html>

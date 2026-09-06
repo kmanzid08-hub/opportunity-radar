@@ -3,548 +3,607 @@
 
 <head>
     <meta charset="UTF-8">
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>Pipeline | Opportunity Radar</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=5">
 
-    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=4">
+    <style>
+        .pipeline-shell {
+            max-width: 1240px;
+            margin: 0 auto;
+            padding: 30px 24px 70px;
+        }
+
+        .pipeline-hero-v2 {
+            display: flex;
+            justify-content: space-between;
+            gap: 28px;
+            align-items: flex-end;
+            margin-bottom: 24px;
+        }
+
+        .pipeline-hero-v2 h1 {
+            margin: 8px 0 8px;
+            font-size: 42px;
+            line-height: 1.05;
+            letter-spacing: -.035em;
+        }
+
+        .pipeline-hero-v2 p {
+            margin: 0;
+            color: #64748b;
+        }
+
+        .pipeline-count-v2 {
+            min-width: 180px;
+            padding: 20px 22px;
+            border: 1px solid #e6e9ef;
+            border-radius: 16px;
+            background: #fff;
+            text-align: right;
+        }
+
+        .pipeline-count-v2 span {
+            display: block;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+        }
+
+        .pipeline-count-v2 strong {
+            display: block;
+            margin-top: 4px;
+            font-size: 34px;
+        }
+
+        .pipeline-summary-v2 {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+
+        .pipeline-summary-card {
+            padding: 18px 20px;
+            background: #fff;
+            border: 1px solid #e6e9ef;
+            border-radius: 14px;
+        }
+
+        .pipeline-summary-card span {
+            display: block;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+        }
+
+        .pipeline-summary-card strong {
+            display: block;
+            margin-top: 5px;
+            font-size: 26px;
+        }
+
+        .pipeline-list-v2 {
+            display: grid;
+            gap: 18px;
+        }
+
+        .pursuit-card {
+            display: grid;
+            grid-template-columns: 8px minmax(0, 1fr) 190px;
+            overflow: hidden;
+            background: #fff;
+            border: 1px solid #e6e9ef;
+            border-radius: 18px;
+            box-shadow: 0 8px 28px rgba(15, 23, 42, .04);
+        }
+
+        .priority-rail {
+            background: #d7dde6;
+        }
+
+        .priority-rail-high {
+            background: #ef4444
+        }
+
+        .priority-rail-medium {
+            background: #f59e0b
+        }
+
+        .priority-rail-low {
+            background: #10b981
+        }
+
+        .pursuit-main {
+            padding: 24px;
+            min-width: 0;
+        }
+
+        .pursuit-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            align-items: flex-start;
+        }
+
+        .pursuit-org {
+            margin: 0 0 6px;
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .pursuit-title {
+            margin: 0;
+            font-size: 22px;
+            line-height: 1.25;
+            letter-spacing: -.02em;
+        }
+
+        .pursuit-title a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .pursuit-title a:hover {
+            text-decoration: underline;
+        }
+
+        .stage-badge {
+            white-space: nowrap;
+        }
+
+        .pursuit-meta {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+            margin-top: 20px;
+        }
+
+        .pursuit-meta-item span {
+            display: block;
+            margin-bottom: 5px;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+        }
+
+        .pursuit-meta-item strong {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 13px;
+        }
+
+        .next-action-box {
+            margin-top: 18px;
+            padding: 16px;
+            border: 1px solid #edf0f4;
+            border-radius: 12px;
+            background: #fafbfc;
+        }
+
+        .next-action-box .metadata-label {
+            display: block;
+            margin-bottom: 6px;
+        }
+
+        .next-action-box p {
+            margin: 0;
+            line-height: 1.55;
+            color: #334155;
+        }
+
+        .due-chip {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 5px 9px;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .due-overdue {
+            background: #fee2e2;
+            color: #991b1b
+        }
+
+        .due-today {
+            background: #fef3c7;
+            color: #92400e
+        }
+
+        .due-upcoming {
+            background: #e0f2fe;
+            color: #075985
+        }
+
+        .pursuit-actions {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 10px;
+            padding: 24px 20px;
+            border-left: 1px solid #eef1f5;
+            background: #fbfcfd;
+        }
+
+        .pursuit-actions a,
+        .pursuit-actions button,
+        .pursuit-actions form {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .pursuit-management {
+            margin-top: 18px;
+            border-top: 1px solid #edf0f4;
+            padding-top: 16px;
+        }
+
+        .pursuit-management summary {
+            cursor: pointer;
+            font-weight: 800;
+            color: #194f82;
+        }
+
+        .pursuit-form {
+            display: grid;
+            gap: 16px;
+            margin-top: 18px;
+        }
+
+        .pursuit-form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .pursuit-field span {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .pursuit-field input,
+        .pursuit-field select,
+        .pursuit-field textarea {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .pursuit-wide {
+            grid-column: 1/-1
+        }
+
+        .remove-link {
+            margin-top: 6px;
+            width: 100%;
+            border: 0;
+            background: transparent;
+            color: #b42318;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .empty-panel {
+            padding: 50px 30px;
+            text-align: center;
+            background: #fff;
+            border: 1px solid #e6e9ef;
+            border-radius: 18px;
+        }
+
+        @media(max-width:960px) {
+            .pipeline-summary-v2 {
+                grid-template-columns: repeat(2, minmax(0, 1fr))
+            }
+
+            .pursuit-card {
+                grid-template-columns: 8px minmax(0, 1fr)
+            }
+
+            .pursuit-actions {
+                grid-column: 2;
+                border-left: 0;
+                border-top: 1px solid #eef1f5;
+                flex-direction: row;
+                flex-wrap: wrap;
+            }
+
+            .pursuit-actions a,
+            .pursuit-actions form {
+                width: auto
+            }
+        }
+
+        @media(max-width:720px) {
+            .pipeline-shell {
+                padding: 20px 14px 50px
+            }
+
+            .pipeline-hero-v2 {
+                display: block
+            }
+
+            .pipeline-count-v2 {
+                margin-top: 16px;
+                text-align: left
+            }
+
+            .pipeline-summary-v2 {
+                grid-template-columns: 1fr
+            }
+
+            .pursuit-meta {
+                grid-template-columns: repeat(2, minmax(0, 1fr))
+            }
+
+            .pursuit-form-grid {
+                grid-template-columns: 1fr
+            }
+
+            .pursuit-wide {
+                grid-column: auto
+            }
+
+            .pursuit-actions {
+                flex-direction: column
+            }
+
+            .pursuit-actions a,
+            .pursuit-actions form {
+                width: 100%
+            }
+        }
+    </style>
 </head>
 
 <body>
-
     <header class="app-header">
-
         <div class="app-header-inner">
-
             <a href="/" class="brand">
-                <span class="brand-mark">
-                    OR
-                </span>
-
+                <span class="brand-mark">OR</span>
                 <span>
-                    <strong>
-                        Opportunity Radar
-                    </strong>
-
-                    <small>
-                        Business opportunity intelligence
-                    </small>
+                    <strong>Opportunity Radar</strong>
+                    <small>Business opportunity intelligence</small>
                 </span>
             </a>
 
-
             <div class="topbar-actions">
-
                 <nav class="main-nav" aria-label="Primary navigation">
-                    <a href="/" class="nav-link">
-                        Discover
-                    </a>
-
-                    <a href="/pipeline" class="nav-link active">
-                        Pipeline
-                    </a>
-
-                    <a href="/?deadline_filter=archived" class="nav-link">
-                        Archived
-                    </a>
-
-                    <a href="/business-profile" class="nav-link">
-                        Business Profile
-                    </a>
+                    <a href="/" class="nav-link">Discover</a>
+                    <a href="/pipeline" class="nav-link active">Pipeline</a>
+                    <a href="/?deadline_filter=archived" class="nav-link">Archived</a>
+                    <a href="/sources" class="nav-link">Sources</a>
+                    <a href="/business-profile" class="nav-link">Business Profile</a>
                 </nav>
-
             </div>
-
         </div>
-
     </header>
 
+    <main class="pipeline-shell">
 
-    <main class="discover-shell pipeline-page-shell">
-
-        <section class="pipeline-hero">
-
+        <section class="pipeline-hero-v2">
             <div>
-
-                <p class="eyebrow">
-                    Business development
-                </p>
-
-                <h1>
-                    Pipeline
-                </h1>
-
-                <p class="hero-copy">
-                    Track and manage the opportunities
-                    your team has chosen to pursue.
-                </p>
-
+                <p class="eyebrow">Business development</p>
+                <h1>Pipeline</h1>
+                <p>Track the opportunities your team has chosen to pursue.</p>
             </div>
 
-
-            <div class="pipeline-count-card">
-
-                <span>
-                    Active pursuits
-                </span>
-
-                <strong>
-                    {{ pipeline_count }}
-                </strong>
-
+            <div class="pipeline-count-v2">
+                <span>Active pursuits</span>
+                <strong>{{ pipeline_count }}</strong>
             </div>
-
         </section>
-
 
         {% if opportunities %}
 
-        <section class="pipeline-board-summary">
-
-            <div class="pipeline-summary-item">
-
-                <span class="pipeline-summary-label">
-                    Total
-                </span>
-
-                <strong>
-                    {{ pipeline_count }}
-                </strong>
-
+        <section class="pipeline-summary-v2">
+            <div class="pipeline-summary-card">
+                <span>Total</span>
+                <strong>{{ pipeline_count }}</strong>
             </div>
 
-
-            <div class="pipeline-summary-item">
-
-                <span class="pipeline-summary-label">
-                    Overdue actions
-                </span>
-
-                <strong>
-                    {{ overdue_count }}
-                </strong>
-
+            <div class="pipeline-summary-card">
+                <span>Overdue actions</span>
+                <strong>{{ overdue_count }}</strong>
             </div>
 
-
-            <div class="pipeline-summary-item">
-
-                <span class="pipeline-summary-label">
-                    Unassigned
-                </span>
-
-                <strong>
-                    {{ unassigned_count }}
-                </strong>
-
+            <div class="pipeline-summary-card">
+                <span>Unassigned</span>
+                <strong>{{ unassigned_count }}</strong>
             </div>
 
-
-            <div class="pipeline-summary-item">
-
-                <span class="pipeline-summary-label">
-                    High priority
-                </span>
-
-                <strong>
-                    {{ high_priority_count }}
-                </strong>
-
+            <div class="pipeline-summary-card">
+                <span>High priority</span>
+                <strong>{{ high_priority_count }}</strong>
             </div>
-
         </section>
 
-
-        <section class="pipeline-card-list">
-
+        <section class="pipeline-list-v2">
             {% for opportunity in opportunities %}
 
-            <article class="
-                        pipeline-card
-                        {% if opportunity.is_expired %}
-                            pipeline-card-expired
-                        {% endif %}
-                    ">
+            <article class="pursuit-card {% if opportunity.is_expired %}pipeline-card-expired{% endif %}">
 
-                <div class="pipeline-card-priority">
+                <div class="
+                priority-rail
+                priority-rail-{{ (opportunity.lead_priority or 'medium')|lower }}
+            "></div>
 
-                    <span class="
-                                priority-label
-                                priority-{{
-                                    (
-                                        opportunity.lead_priority
-                                        or 'medium'
-                                    )|lower
-                                }}
-                            ">
-                        {{
-                        opportunity.lead_priority
-                        or "Medium"
-                        }}
-                    </span>
+                <div class="pursuit-main">
 
-                </div>
-
-
-                <div class="pipeline-card-main">
-
-                    <div class="pipeline-card-top">
-
+                    <div class="pursuit-top">
                         <div>
-
-                            <p class="pipeline-organisation">
-
-                                {{
-                                opportunity.organisation_name
-                                or "Organisation not specified"
-                                }}
-
+                            <p class="pursuit-org">
+                                {{ opportunity.organisation_name or "Organisation not specified" }}
                             </p>
 
-
-                            <h2 class="pipeline-card-title">
-
+                            <h2 class="pursuit-title">
                                 <a href="/opportunities/{{ opportunity.id }}">
                                     {{ opportunity.title }}
                                 </a>
-
                             </h2>
-
                         </div>
 
-
-                        <span class="badge status-badge">
-
-                            {{
-                            opportunity.lead_status
-                            or "Under Review"
-                            }}
-
+                        <span class="badge status-badge stage-badge">
+                            {{ opportunity.lead_status or "Under Review" }}
                         </span>
-
                     </div>
 
+                    <div class="pursuit-meta">
 
-                    <div class="pipeline-card-details">
-
-                        <div class="pipeline-detail-item">
-
-                            <span class="metadata-label">
-                                Tender deadline
-                            </span>
-
-                            <strong>
-
-                                {% if opportunity.deadline %}
-
-                                {{
-                                opportunity.deadline.strftime(
-                                "%d %b %Y"
-                                )
-                                }}
-
-                                {% else %}
-
-                                Not identified
-
-                                {% endif %}
-
-                            </strong>
-
+                        <div class="pursuit-meta-item">
+                            <span>Priority</span>
+                            <strong>{{ opportunity.lead_priority or "Medium" }}</strong>
                         </div>
 
+                        <div class="pursuit-meta-item">
+                            <span>Tender deadline</span>
+                            <strong>
+                                {% if opportunity.deadline %}
+                                {{ opportunity.deadline.strftime("%d %b %Y") }}
+                                {% else %}
+                                Not identified
+                                {% endif %}
+                            </strong>
+                        </div>
 
-                        <div class="pipeline-detail-item">
+                        <div class="pursuit-meta-item">
+                            <span>Assigned to</span>
+                            <strong>{{ opportunity.assigned_to or "Unassigned" }}</strong>
+                        </div>
 
-                            <span class="metadata-label">
-                                Next action due
-                            </span>
-
+                        <div class="pursuit-meta-item">
+                            <span>Next action due</span>
 
                             {% if opportunity.next_action_due %}
-
-                            {% if opportunity.next_action_due < today %} <span class="
-                                                due-label
-                                                due-overdue
-                                            ">
-                                Overdue ·
-                                {{
-                                opportunity.next_action_due.strftime(
-                                "%d %b %Y"
-                                )
-                                }}
+                            {% if opportunity.next_action_due < today %} <span class="due-chip due-overdue">
+                                Overdue · {{ opportunity.next_action_due.strftime("%d %b %Y") }}
                                 </span>
-
-
                                 {% elif opportunity.next_action_due == today %}
-
-                                <span class="
-                                                due-label
-                                                due-today
-                                            ">
+                                <span class="due-chip due-today">
                                     Due today
                                 </span>
-
-
                                 {% else %}
-
-                                <span class="
-                                                due-label
-                                                due-upcoming
-                                            ">
-                                    {{
-                                    opportunity.next_action_due.strftime(
-                                    "%d %b %Y"
-                                    )
-                                    }}
+                                <span class="due-chip due-upcoming">
+                                    {{ opportunity.next_action_due.strftime("%d %b %Y") }}
                                 </span>
-
                                 {% endif %}
-
-
                                 {% else %}
-
-                                <span class="muted-text">
-                                    Not scheduled
-                                </span>
-
+                                <strong>Not scheduled</strong>
                                 {% endif %}
-
-                        </div>
-
-
-                        <div class="pipeline-detail-item">
-
-                            <span class="metadata-label">
-                                Assigned to
-                            </span>
-
-                            <strong>
-
-                                {{
-                                opportunity.assigned_to
-                                or "Unassigned"
-                                }}
-
-                            </strong>
-
-                        </div>
-
-
-                        <div class="pipeline-detail-item">
-
-                            <span class="metadata-label">
-                                Match score
-                            </span>
-
-                            <strong>
-
-                                {% if opportunity.match_score is not none %}
-                                {{ opportunity.match_score }}
-                                {% else %}
-                                —
-                                {% endif %}
-
-                            </strong>
-
                         </div>
 
                     </div>
-
 
                     {% if opportunity.next_action %}
-
-                    <div class="pipeline-next-action">
-
-                        <span class="metadata-label">
-                            Next action
-                        </span>
-
-                        <p>
-                            {{ opportunity.next_action }}
-                        </p>
-
+                    <div class="next-action-box">
+                        <span class="metadata-label">Next action</span>
+                        <p>{{ opportunity.next_action }}</p>
                     </div>
-
                     {% endif %}
 
-
-                    <details class="pipeline-management">
-
-                        <summary class="pipeline-management-toggle">
-                            Manage pursuit
-                        </summary>
-
+                    <details class="pursuit-management">
+                        <summary>Manage pursuit</summary>
 
                         <form method="post" action="/opportunities/{{ opportunity.id }}/pipeline/update"
-                            class="pipeline-management-form">
+                            class="pursuit-form">
+                            <div class="pursuit-form-grid">
 
-                            <div class="pipeline-management-grid">
-
-                                <label class="pipeline-field">
-
-                                    <span>
-                                        Priority
-                                    </span>
-
+                                <label class="pursuit-field">
+                                    <span>Priority</span>
                                     <select name="lead_priority">
-
-                                        <option value="">
-                                            Not set
-                                        </option>
-
+                                        <option value="">Not set</option>
                                         {% for priority in lead_priorities %}
-
-                                        <option value="{{ priority }}" {% if opportunity.lead_priority==priority %}
-                                            selected {% endif %}>
+                                        <option value="{{ priority }}" {% if opportunity.lead_priority==priority
+                                            %}selected{% endif %}>
                                             {{ priority }}
                                         </option>
-
                                         {% endfor %}
-
                                     </select>
-
                                 </label>
 
-
-                                <label class="pipeline-field">
-
-                                    <span>
-                                        Stage
-                                    </span>
-
+                                <label class="pursuit-field">
+                                    <span>Stage</span>
                                     <select name="lead_status">
-
-                                        <option value="">
-                                            Not set
-                                        </option>
-
+                                        <option value="">Not set</option>
                                         {% for lead_status in lead_statuses %}
-
-                                        <option value="{{ lead_status }}" {% if opportunity.lead_status==lead_status %}
-                                            selected {% endif %}>
+                                        <option value="{{ lead_status }}" {% if opportunity.lead_status==lead_status
+                                            %}selected{% endif %}>
                                             {{ lead_status }}
                                         </option>
-
                                         {% endfor %}
-
                                     </select>
-
                                 </label>
 
-
-                                <label class="pipeline-field">
-
-                                    <span>
-                                        Assigned to
-                                    </span>
-
+                                <label class="pursuit-field">
+                                    <span>Assigned to</span>
                                     <input type="text" name="assigned_to" value="{{ opportunity.assigned_to or '' }}"
                                         placeholder="Team member">
-
                                 </label>
 
-
-                                <label class="pipeline-field">
-
-                                    <span>
-                                        Next action due
-                                    </span>
-
+                                <label class="pursuit-field">
+                                    <span>Next action due</span>
                                     <input type="date" name="next_action_due"
                                         value="{% if opportunity.next_action_due %}{{ opportunity.next_action_due.isoformat() }}{% endif %}">
-
                                 </label>
 
-
-                                <label class="pipeline-field">
-
-                                    <span>
-                                        Last follow-up
-                                    </span>
-
+                                <label class="pursuit-field">
+                                    <span>Last follow-up</span>
                                     <input type="date" name="last_follow_up_date"
                                         value="{% if opportunity.last_follow_up_date %}{{ opportunity.last_follow_up_date.isoformat() }}{% endif %}">
+                                </label>
 
+                                <label class="pursuit-field pursuit-wide">
+                                    <span>Next action</span>
+                                    <input type="text" name="next_action" value="{{ opportunity.next_action or '' }}"
+                                        placeholder="Example: Review TOR and confirm bid/no-bid">
+                                </label>
+
+                                <label class="pursuit-field pursuit-wide">
+                                    <span>Pipeline notes</span>
+                                    <textarea name="lead_notes" rows="4"
+                                        placeholder="Decision notes, risks, contacts or follow-up information">{{ opportunity.lead_notes or '' }}</textarea>
                                 </label>
 
                             </div>
 
-
-                            <label class="
-                                        pipeline-field
-                                        pipeline-field-wide
-                                    ">
-
-                                <span>
-                                    Next action
-                                </span>
-
-                                <input type="text" name="next_action" value="{{ opportunity.next_action or '' }}"
-                                    placeholder="Example: Review TOR and confirm bid/no-bid">
-
-                            </label>
-
-
-                            <label class="
-                                        pipeline-field
-                                        pipeline-field-wide
-                                    ">
-
-                                <span>
-                                    Pipeline notes
-                                </span>
-
-                                <textarea name="lead_notes" rows="3"
-                                    placeholder="Decision notes, risks, contacts or follow-up information">{{ opportunity.lead_notes or '' }}</textarea>
-
-                            </label>
-
-
-                            <div class="pipeline-management-actions">
-
-                                <button type="submit" class="primary-button">
-                                    Save changes
-                                </button>
-
-                            </div>
-
+                            <button type="submit" class="primary-button">
+                                Save changes
+                            </button>
                         </form>
 
-
                         <form method="post" action="/opportunities/{{ opportunity.id }}/pipeline/remove"
-                            class="pipeline-remove-form"
                             onsubmit="return confirm('Remove this opportunity from the pipeline?');">
-
-                            <button type="submit" class="pipeline-remove-button">
+                            <button type="submit" class="remove-link">
                                 Remove from pipeline
                             </button>
-
                         </form>
 
                     </details>
 
                 </div>
 
+                <div class="pursuit-actions">
 
-                <div class="pipeline-card-actions">
-
-                    <a href="/opportunities/{{ opportunity.id }}" class="
-                                primary-button
-                                pipeline-open-button
-                            ">
+                    <a href="/opportunities/{{ opportunity.id }}" class="primary-button">
                         Open pursuit
                     </a>
 
-
                     {% if opportunity.source_url %}
-
                     <a href="{{ opportunity.source_url }}" target="_blank" rel="noopener noreferrer"
                         class="source-link">
                         Original source ↗
                     </a>
-
                     {% endif %}
 
                 </div>
@@ -552,37 +611,20 @@
             </article>
 
             {% endfor %}
-
         </section>
-
 
         {% else %}
 
-        <section class="empty-state modern-empty-state">
-
-            <div class="empty-icon">
-                ☆
-            </div>
-
-            <h3>
-                Your pipeline is empty
-            </h3>
-
-            <p>
-                Save promising opportunities from Discover
-                to start building your pursuit pipeline.
-            </p>
-
-            <a href="/" class="primary-button">
-                Browse opportunities
-            </a>
-
+        <section class="empty-panel">
+            <div class="empty-icon">☆</div>
+            <h3>Your pipeline is empty</h3>
+            <p>Save promising opportunities from Discover to start building your pursuit pipeline.</p>
+            <a href="/" class="primary-button">Browse opportunities</a>
         </section>
 
         {% endif %}
 
     </main>
-
 </body>
 
 </html>
