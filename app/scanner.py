@@ -2,12 +2,23 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import inspect, select, text
+from sqlalchemy import select
 
-from app.database import Base, SessionLocal, engine
-from app.filters import classify_opportunity
+from app.database import SessionLocal
+from app.intelligence.opportunity_pipeline import (
+    OpportunityProcessingStatus,
+    link_analysis_to_saved_opportunity,
+    process_opportunity_candidate,
+)
+from app.intelligence.matching_engine import (
+    CompanyMatchProcessingStatus,
+    CompanyProfileInput,
+    load_active_company_profiles,
+    match_verified_opportunity,
+)
 from app.models import Opportunity, Source
-from app.schemas import FilteredOpportunity
+from app.intelligence.triage_engine import triage_verified_opportunity
+from app.schemas import FilteredOpportunity, RawOpportunity
 from app.scanners.base import BaseScanner
 from app.scanners.company_websites import CompanyWebsiteScanner
 from app.scanners.job_in_rwanda import JobInRwandaScanner
@@ -20,78 +31,8 @@ ACTIVE_STATUSES: tuple[str, ...] = (
 )
 
 
-SOURCE_COLUMNS: dict[str, str] = {
-    "last_discovered_at": "DATETIME",
-    "last_scan_started_at": "DATETIME",
-    "last_opportunity_found_at": "DATETIME",
-    "last_scan_duration_seconds": "FLOAT",
-    "last_http_status": "INTEGER",
-    "total_opportunities_found": (
-        "INTEGER NOT NULL DEFAULT 0"
-    ),
-    "scan_interval_hours": (
-        "INTEGER NOT NULL DEFAULT 12"
-    ),
-    "priority_score": (
-        "FLOAT NOT NULL DEFAULT 50"
-    ),
-    "url_relevance_score": (
-        "FLOAT NOT NULL DEFAULT 0"
-    ),
-    "is_auto_disabled": (
-        "BOOLEAN NOT NULL DEFAULT 0"
-    ),
-    "disabled_reason": "VARCHAR(500)",
-}
-
-
 def current_utc_time() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def ensure_sqlite_schema() -> None:
-    """
-    Create tables and add missing Source columns for SQLite.
-
-    SQLAlchemy create_all() creates new tables but does not add columns
-    to an existing table, so Phase 1 columns are added using ALTER TABLE.
-    """
-    Base.metadata.create_all(bind=engine)
-
-    if engine.dialect.name != "sqlite":
-        return
-
-    inspector = inspect(engine)
-
-    if "sources" not in inspector.get_table_names():
-        return
-
-    existing_columns = {
-        column["name"]
-        for column in inspector.get_columns("sources")
-    }
-
-    missing_columns = {
-        name: sql_type
-        for name, sql_type in SOURCE_COLUMNS.items()
-        if name not in existing_columns
-    }
-
-    if not missing_columns:
-        return
-
-    with engine.begin() as connection:
-        for column_name, sql_type in missing_columns.items():
-            connection.execute(
-                text(
-                    f'ALTER TABLE sources '
-                    f'ADD COLUMN "{column_name}" {sql_type}'
-                )
-            )
-            print(
-                f"Added missing database column: "
-                f"sources.{column_name}"
-            )
 
 
 def approve_existing_sources() -> int:
@@ -302,6 +243,58 @@ def save_opportunity(
         return True
 
 
+def refresh_duplicate_opportunity(
+    opportunity_id: int,
+    raw_opportunity: RawOpportunity,
+) -> None:
+    """Refresh safe fields while retaining the canonical source URL."""
+    with SessionLocal() as db:
+        opportunity = db.get(Opportunity, opportunity_id)
+        if opportunity is None:
+            return
+
+        description = getattr(raw_opportunity, "description", None)
+        deadline = getattr(raw_opportunity, "deadline", None)
+        organisation_name = clean_organisation_name(
+            getattr(raw_opportunity, "organisation_name", None)
+        )
+        opportunity.last_seen_at = current_utc_time()
+        if not opportunity.description and description:
+            opportunity.description = str(description)
+        if opportunity.deadline is None and deadline is not None:
+            opportunity.deadline = deadline
+        if not opportunity.organisation_name and organisation_name:
+            opportunity.organisation_name = organisation_name
+        update_expiry_status(opportunity)
+        db.commit()
+
+
+def match_saved_opportunity(
+    opportunity_id: int,
+    profiles: list[CompanyProfileInput],
+) -> tuple[int, int]:
+    outcomes = match_verified_opportunity(
+        opportunity_id,
+        profiles=profiles,
+    )
+    try:
+        triage_outcomes = triage_verified_opportunity(
+            opportunity_id, profiles=profiles, matches=outcomes,
+        )
+        for outcome in triage_outcomes:
+            print(f"Triage opportunity={opportunity_id} company={outcome.company_id}: {outcome.status}")
+    except Exception:
+        # Matching/verification already committed; triage cannot invalidate them.
+        print(f"Triage unavailable for opportunity={opportunity_id}")
+    return (
+        sum(
+            outcome.status is CompanyMatchProcessingStatus.ERROR
+            for outcome in outcomes
+        ),
+        sum(outcome.qualifies_for_feed for outcome in outcomes),
+    )
+
+
 def mark_expired_opportunities() -> int:
     updated_count = 0
     now = current_utc_time()
@@ -357,15 +350,21 @@ def get_scanner_name(
 
 def run_scanner() -> None:
     print(
-        "AI verification: OFF "
-        "(normal scan uses deterministic filters only)"
+        "Gemini opportunity intelligence: ON "
+        "(explicit scanner operation only)"
     )
-
-    ensure_sqlite_schema()
 
     approved_count = approve_existing_sources()
     expired_count = mark_expired_opportunities()
     scanners = get_scanners()
+    try:
+        company_profiles = load_active_company_profiles(None)
+    except Exception as exc:
+        company_profiles = []
+        print(
+            "Company profile loading failed: "
+            f"{type(exc).__name__}: {exc}"
+        )
 
     total_found = 0
     total_relevant = 0
@@ -374,6 +373,8 @@ def run_scanner() -> None:
     total_scan_failures = 0
     total_classification_failures = 0
     total_save_failures = 0
+    total_matching_failures = 0
+    total_qualifying_matches = 0
 
     print("=" * 60)
     print("Opportunity Radar")
@@ -419,8 +420,9 @@ def run_scanner() -> None:
 
         for raw_opportunity in raw_opportunities:
             try:
-                filtered = classify_opportunity(
-                    raw_opportunity
+                intelligence = process_opportunity_candidate(
+                    raw_opportunity,
+                    country_context=raw_opportunity.country_context,
                 )
             except Exception as exc:
                 total_classification_failures += 1
@@ -434,14 +436,58 @@ def run_scanner() -> None:
                 )
                 continue
 
-            if filtered is None:
+            if intelligence.status is OpportunityProcessingStatus.ERROR:
+                total_classification_failures += 1
+                print(
+                    "  Gemini analysis unavailable for: "
+                    f"{raw_opportunity.title[:80]}"
+                )
+                continue
+
+            if intelligence.status in {
+                OpportunityProcessingStatus.REJECTED,
+                OpportunityProcessingStatus.REVIEW,
+            }:
                 continue
 
             total_relevant += 1
             source_relevant += 1
 
+            if intelligence.duplicate_opportunity_id is not None:
+                total_updated_or_existing += 1
+                refresh_duplicate_opportunity(
+                    intelligence.duplicate_opportunity_id,
+                    raw_opportunity,
+                )
+                try:
+                    failures, qualifying = match_saved_opportunity(
+                        intelligence.duplicate_opportunity_id,
+                        company_profiles,
+                    )
+                    total_matching_failures += failures
+                    total_qualifying_matches += qualifying
+                except Exception as exc:
+                    total_matching_failures += 1
+                    print(
+                        "  Company matching failed for existing opportunity: "
+                        f"{type(exc).__name__}: {exc}"
+                    )
+                print(
+                    "  [EXISTING] [AI duplicate] "
+                    f"{raw_opportunity.title[:90]}"
+                )
+                continue
+
+            filtered = intelligence.filtered_opportunity
+            if filtered is None:
+                total_classification_failures += 1
+                continue
+
             try:
                 was_saved = save_opportunity(filtered)
+                opportunity_id = link_analysis_to_saved_opportunity(
+                    filtered.source_url
+                )
             except Exception as exc:
                 total_save_failures += 1
 
@@ -453,6 +499,22 @@ def run_scanner() -> None:
                     f"    {type(exc).__name__}: {exc}"
                 )
                 continue
+
+            if opportunity_id is not None:
+                try:
+                    failures, qualifying = match_saved_opportunity(
+                        opportunity_id,
+                        company_profiles,
+                    )
+                    total_matching_failures += failures
+                    total_qualifying_matches += qualifying
+                except Exception as exc:
+                    total_matching_failures += 1
+                    print(
+                        "  Company matching failed for: "
+                        f"{filtered.title[:80]}"
+                    )
+                    print(f"    {type(exc).__name__}: {exc}")
 
             if was_saved:
                 total_saved += 1
@@ -518,6 +580,14 @@ def run_scanner() -> None:
     print(
         f"Database save failures:        "
         f"{total_save_failures}"
+    )
+    print(
+        f"Company matching failures:     "
+        f"{total_matching_failures}"
+    )
+    print(
+        f"Qualifying company matches:    "
+        f"{total_qualifying_matches}"
     )
     print("Finished.")
     print("=" * 60)

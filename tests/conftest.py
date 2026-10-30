@@ -31,6 +31,47 @@ class ExternalAccessBlocked(AssertionError):
 ORIGINAL_SOCKET_CONNECT = socket.socket.connect
 
 
+def stamp_current_fixture_matches(db) -> None:
+    """Explicit opt-in for legacy UI fixtures, never production or autouse.
+
+    Rendering tests now need real analysis/profile fingerprints instead of dummy
+    hashes. Preserve their chosen scores/filtering data and use the real builder.
+    """
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from app.models import Opportunity, AIOpportunityAnalysis, CompanyOpportunityMatch
+    from app.intelligence.schemas import OpportunityAnalysis
+    from app.intelligence.opportunity_pipeline import load_canonical_analyses
+    from app.intelligence.match_store import load_current_profiles
+    from app.intelligence.matching_engine import build_match_fingerprint
+
+    db.flush()
+    matches = list(db.scalars(select(CompanyOpportunityMatch)))
+    analyses = load_canonical_analyses(db, {m.opportunity_id for m in matches})
+    for oid in {m.opportunity_id for m in matches} - analyses.keys():
+        opportunity = db.get(Opportunity, oid)
+        analysis = OpportunityAnalysis(
+            decision='ACCEPT', confidence=95, reason='Stored fixture analysis',
+            title=opportunity.title, buyer_name=opportunity.organisation_name,
+            opportunity_type='CONSULTANCY', status='ACTIVE',
+            summary=opportunity.description, deadline=opportunity.deadline,
+        )
+        db.add(AIOpportunityAnalysis(
+            opportunity_id=oid, source_url=opportunity.source_url,
+            raw_title=opportunity.title, source_name=opportunity.source_name,
+            content_fingerprint='fixture-content', analysis_data=analysis.model_dump(mode='json'),
+            analyzed_at=datetime.now(timezone.utc),
+        ))
+        analyses[oid] = analysis
+    profiles = load_current_profiles(db)
+    for match in matches:
+        profile = profiles[match.organization_id]
+        match.match_fingerprint = build_match_fingerprint(
+            company_profile=profile.profile, opportunity=analyses[match.opportunity_id],
+            minimum_score=profile.minimum_score,
+        )
+
+
 def _block_external_access(*_args: object, **_kwargs: object) -> None:
     raise ExternalAccessBlocked(
         "External network and subprocess access is blocked during tests."
@@ -138,13 +179,27 @@ def client(
 ):
     from app import main
 
+    # Existing presentation/characterization tests deliberately exercise the legacy
+    # unscoped fixture data. Security and beta journeys use real TestClient sessions
+    # in test_private_beta.py, without this narrowly scoped fixture override.
+    from app.beta_security import BetaSecurityMiddleware
+
+    async def legacy_dispatch(self, request, call_next):
+        request.state.csrf = "legacy-test-only"
+        request.state.user = None
+        return await call_next(request)
+
+    monkeypatch.setattr(BetaSecurityMiddleware, "dispatch", legacy_dispatch)
+
     scheduler_start = Mock()
     scheduler_stop = Mock()
     monkeypatch.setattr(main.scheduler, "start", scheduler_start)
     monkeypatch.setattr(main.scheduler, "stop", scheduler_stop)
 
+    main.app.middleware_stack = None
     with TestClient(main.app) as test_client:
         yield test_client
 
+    main.app.middleware_stack = None
     scheduler_start.assert_not_called()
     scheduler_stop.assert_not_called()

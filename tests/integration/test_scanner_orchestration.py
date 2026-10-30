@@ -6,8 +6,12 @@ import pytest
 from sqlalchemy import func, select
 
 from app import scanner
+from app.intelligence.opportunity_pipeline import (
+    OpportunityProcessingOutcome,
+    OpportunityProcessingStatus,
+)
 from app.models import Opportunity
-from app.schemas import RawOpportunity
+from app.schemas import FilteredOpportunity, RawOpportunity
 
 
 class StubScanner:
@@ -63,11 +67,6 @@ def _configure_isolated_scan(
     )
     monkeypatch.setattr(
         scanner,
-        "ensure_sqlite_schema",
-        lambda: None,
-    )
-    monkeypatch.setattr(
-        scanner,
         "approve_existing_sources",
         lambda: 0,
     )
@@ -80,6 +79,46 @@ def _configure_isolated_scan(
         scanner,
         "get_scanners",
         lambda: [StubScanner(opportunities)],
+    )
+
+    def process_candidate(
+        raw: RawOpportunity,
+        *,
+        country_context: str | None = None,
+    ) -> OpportunityProcessingOutcome:
+        del country_context
+        if raw.title == "About our audit services":
+            return OpportunityProcessingOutcome(
+                status=OpportunityProcessingStatus.REJECTED,
+                analysis=None,
+                analyzed=True,
+            )
+        return OpportunityProcessingOutcome(
+            status=OpportunityProcessingStatus.VERIFIED,
+            analysis=None,
+            analyzed=True,
+            filtered_opportunity=FilteredOpportunity(
+                organisation_name=raw.organisation_name,
+                title=raw.title,
+                category="Audit",
+                source_name=raw.source_name,
+                source_url=raw.source_url,
+                match_score=95,
+                match_reason="Verified professional-services notice.",
+                description=raw.description,
+                deadline=raw.deadline,
+            ),
+        )
+
+    monkeypatch.setattr(
+        scanner,
+        "process_opportunity_candidate",
+        process_candidate,
+    )
+    monkeypatch.setattr(
+        scanner,
+        "link_analysis_to_saved_opportunity",
+        lambda _source_url: None,
     )
 
 
@@ -112,17 +151,17 @@ def test_scan_saves_qualifying_item_and_reports_funnel(
     assert stored.category == "Audit"
 
     output = capsys.readouterr().out
-    assert "[REJECTED] About our audit services" in output
-    assert "Reason: no procurement evidence was detected" in output
-    assert "Raw opportunities found: 3" in output
-    assert "Accepted: 2" in output
-    assert "Rejected: 1" in output
-    assert "Duplicates: 1" in output
-    assert "Saved: 1" in output
-    assert "Errors: 0" in output
+    assert "About our audit services" not in output
+    assert "Possible listings found:       3" in output
+    assert "Relevant opportunities:        2" in output
+    assert "New opportunities saved:       1" in output
+    assert "Existing or updated records:   1" in output
+    assert "Scanner failures:              0" in output
+    assert "Classification failures:       0" in output
+    assert "Database save failures:        0" in output
 
 
-def test_classification_error_is_reported_and_propagated(
+def test_classification_error_is_reported_and_scan_continues(
     isolated_session_factory,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -133,27 +172,26 @@ def test_classification_error_is_reported_and_propagated(
         [_qualifying_opportunity()],
     )
 
-    def broken_classifier(
+    def broken_analyzer(
         _opportunity: RawOpportunity,
+        *,
+        country_context: str | None = None,
     ) -> None:
-        raise RuntimeError("classifier contract failed")
+        del country_context
+        raise RuntimeError("analyzer contract failed")
 
     monkeypatch.setattr(
         scanner,
-        "classify_opportunity_with_reason",
-        broken_classifier,
+        "process_opportunity_candidate",
+        broken_analyzer,
     )
 
-    with pytest.raises(
-        RuntimeError,
-        match="classifier contract failed",
-    ):
-        scanner.run_scanner()
+    scanner.run_scanner()
 
     output = capsys.readouterr().out
-    assert "Raw opportunities found: 1" in output
-    assert "Accepted: 0" in output
-    assert "Rejected: 0" in output
-    assert "Duplicates: 0" in output
-    assert "Saved: 0" in output
-    assert "Errors: 1" in output
+    assert "Classification failed for:" in output
+    assert "RuntimeError: analyzer contract failed" in output
+    assert "Possible listings found:       1" in output
+    assert "Relevant opportunities:        0" in output
+    assert "New opportunities saved:       0" in output
+    assert "Classification failures:       1" in output

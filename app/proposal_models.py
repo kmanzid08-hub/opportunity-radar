@@ -12,6 +12,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    false,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -96,7 +97,7 @@ class Proposal(Base):
         Boolean,
         nullable=False,
         default=False,
-        server_default="0",
+        server_default=false(),
     )
 
     bid_security_amount: Mapped[Decimal | None] = mapped_column(
@@ -124,7 +125,7 @@ class Proposal(Base):
         Boolean,
         nullable=False,
         default=False,
-        server_default="0",
+        server_default=false(),
     )
 
     proposal_result: Mapped[str] = mapped_column(

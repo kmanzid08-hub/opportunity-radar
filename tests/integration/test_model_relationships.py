@@ -11,8 +11,19 @@ def test_all_declared_models_configure_together() -> None:
     configure_mappers()
 
     assert set(Base.metadata.tables) == {
+        "workspaces", "beta_users", "beta_sessions", "beta_usage", "workspace_opportunities",
+        "ai_opportunity_analysis",
+        "ai_opportunity_verification",
+        "automation_job_state",
+        "company_opportunity_matches",
+        "company_opportunity_triage",
+        "company_opportunity_readiness",
+        "opportunity_requirements",
+        "opportunity_requirement_extractions",
         "leads",
         "opportunities",
+        "opportunity_preferences",
+        "organizations",
         "proposals",
         "sources",
     }

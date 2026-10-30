@@ -1,0 +1,34 @@
+# STAGING ONLY. Creating/syncing this Blueprint triggers an initial deployment.
+# Do not apply until commit/push and staging deployment are explicitly approved.
+# Never substitute the existing production service name or production secrets.
+services:
+  - type: web
+    name: opportunity-radar-staging
+    runtime: python
+    region: frankfurt
+    plan: 0.5c-512mb
+    branch: global-saas-development
+    numInstances: 1
+    autoDeployTrigger: 'off'
+    buildCommand: pip install -r requirements.txt -c staging/constraints-py312.txt && pip check
+    preDeployCommand: python -m alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log
+    healthCheckPath: /readyz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.12
+      - key: APP_ENV
+        value: production
+      - key: ENABLE_INTERNAL_SCHEDULER
+        value: 'false'
+      - key: PUBLIC_ORIGIN
+        fromService:
+          type: web
+          name: opportunity-radar-staging
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 from sqlalchemy import select
 
@@ -16,7 +14,12 @@ from app.discovery.metadata import (
     merge_discovery_metadata,
 )
 from app.models import Source
-from app.source_discovery import SearchResult, SourceDiscovery
+from app.intelligence.schemas import SourceAnalysis
+from app.source_discovery import (
+    SearchResult,
+    SourceDiscovery,
+    SourceProcessingOutcome,
+)
 from app.source_quality import SourceQualityEvaluator
 
 
@@ -32,7 +35,15 @@ def test_categories_are_complete_and_country_parameterized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("BRAVE_API_KEY", "test-key")
-    discovery = SourceDiscovery(country="Kenya")
+    discovery = SourceDiscovery(
+        country="Kenya",
+        source_analyzer=lambda **_kwargs: SourceAnalysis(
+            decision="ACCEPT",
+            confidence=90,
+            reason="Official source.",
+        ),
+        content_fetcher=lambda _url: "Stable procurement page content.",
+    )
     category_names = {
         category.name
         for category in discovery.DISCOVERY_CATEGORIES
@@ -131,7 +142,15 @@ def test_normalized_duplicate_merges_queries_and_tags(
         "SessionLocal",
         isolated_session_factory,
     )
-    discovery = SourceDiscovery(country="Kenya")
+    discovery = SourceDiscovery(
+        country="Kenya",
+        source_analyzer=lambda **_kwargs: SourceAnalysis(
+            decision="ACCEPT",
+            confidence=90,
+            reason="Official source.",
+        ),
+        content_fetcher=lambda _url: "Stable procurement page content.",
+    )
 
     first = {
         "organisation_name": "Example Authority",
@@ -161,8 +180,8 @@ def test_normalized_duplicate_merges_queries_and_tags(
         "priority_score": 80.0,
     }
 
-    assert discovery._save_candidate(first) is True
-    assert discovery._save_candidate(duplicate) is False
+    assert discovery._save_candidate(first).created is True
+    assert discovery._save_candidate(duplicate).created is False
 
     with isolated_session_factory() as session:
         sources = session.scalars(select(Source)).all()
@@ -210,16 +229,6 @@ def test_discovery_reports_category_and_total_metrics(
         "_wait",
         lambda: waits.append(None),
     )
-    monkeypatch.setattr(
-        source_discovery,
-        "Base",
-        SimpleNamespace(
-            metadata=SimpleNamespace(
-                create_all=lambda **_kwargs: None
-            )
-        ),
-    )
-
     search_results = {
         "first query": [_result("new"), _result("rejected")],
         "second query": [_result("duplicate")],
@@ -242,6 +251,7 @@ def test_discovery_reports_category_and_total_metrics(
         return {
             "organisation_name": result.title,
             "monitor_url": result.url,
+            "domain": f"{result.title.lower()}.example.test",
             "discovery_score": 80.0,
             "tags": ("procurement",),
         }
@@ -251,7 +261,12 @@ def test_discovery_reports_category_and_total_metrics(
     monkeypatch.setattr(
         discovery,
         "_save_candidate",
-        lambda candidate: "new" in str(candidate["monitor_url"]),
+        lambda candidate: SourceProcessingOutcome(
+            status="ACCEPT",
+            created="new" in str(candidate["monitor_url"]),
+            analyzed=True,
+            confidence=80,
+        ),
     )
 
     clock_values = iter(
@@ -270,8 +285,11 @@ def test_discovery_reports_category_and_total_metrics(
         "total_results": 3,
         "candidate_results": 2,
         "added_sources": 1,
+        "accepted_sources": 2,
         "existing_sources": 1,
         "rejected_results": 1,
+        "review_results": 0,
+        "ai_failures": 0,
         "failed_queries": 1,
         "configured_delay_seconds": 2.0,
         "total_runtime_seconds": 4.0,

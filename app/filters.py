@@ -1757,7 +1757,7 @@ def classify_category(
 
     best_category = max(
         category_scores,
-        key=category_scores.get,
+        key=lambda category: category_scores[category],
     )
 
     return (

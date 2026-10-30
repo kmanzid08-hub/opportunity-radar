@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 
 
@@ -10,6 +10,8 @@ class RawOpportunity:
     source_url: str
     description: str | None = None
     deadline: date | None = None
+    country_context: str | None = None
+    outgoing_links: list[str] = field(default_factory=list)
 
 
 @dataclass

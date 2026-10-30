@@ -1,0 +1,13 @@
+{% extends 'beta_base.html' %}
+{% block title %}Analyze an opportunity | Opportunity Radar{% endblock %}
+{% block content %}<p class="eyebrow">Opportunity intelligence</p><h1>Analyze an opportunity</h1>
+<p>Paste a public tender URL, or paste the notice text if the website cannot be accessed. Your submission stays within your workspace.</p>
+{% if companies %}<form action="/analyze" method="post" class="profile-form-grid" data-analysis>
+<input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
+<label class="field"><span>Match for company</span><select name="company_id" required>{% for company in companies %}<option value="{{ company.id }}">{{ company.name }}</option>{% endfor %}</select></label>
+<label class="field"><span>Opportunity URL</span><input type="url" name="url" maxlength="2048" placeholder="https://…" aria-describedby="notice-help"></label>
+<label class="field profile-field-full"><span>Opportunity notice text</span><textarea name="notice_text" rows="14" maxlength="50000" aria-describedby="notice-help"></textarea></label>
+<p id="notice-help" class="quiet">Enter a URL or notice text. When text is supplied, we analyze it without fetching the website. Include the buyer, scope, deadline and requirements when available. Analysis can take a few minutes.</p>
+<button class="button" type="submit">Analyze opportunity</button><p role="status" class="quiet" data-progress></p></form>
+{% else %}<p>Create your company profile to get a company-specific assessment.</p><a class="button" href="/business-profile?new=true">Create company profile</a>{% endif %}
+<p><a href="/assessments">View submitted assessments and notices needing review</a></p>{% endblock %}

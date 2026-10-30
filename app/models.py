@@ -12,7 +12,10 @@ from sqlalchemy import (
     JSON,
     String,
     Text,
+    UniqueConstraint,
+    false,
     func,
+    true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -48,6 +51,9 @@ LEAD_PRIORITIES: tuple[str, ...] = (
 
 class Organization(Base):
     __tablename__ = "organizations"
+
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
+
 
     id: Mapped[int] = mapped_column(
         Integer,
@@ -104,7 +110,7 @@ class Organization(Base):
         Boolean,
         nullable=False,
         default=True,
-        server_default="1",
+        server_default=true(),
         index=True,
     )
 
@@ -133,6 +139,13 @@ class Organization(Base):
 
 class OpportunityPreference(Base):
     __tablename__ = "opportunity_preferences"
+
+    intelligence: Mapped[dict[str, object]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
 
     id: Mapped[int] = mapped_column(
         Integer,
@@ -203,35 +216,35 @@ class OpportunityPreference(Base):
         Boolean,
         nullable=False,
         default=True,
-        server_default="1",
+        server_default=true(),
     )
 
     include_jobs: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
         default=True,
-        server_default="1",
+        server_default=true(),
     )
 
     include_tenders: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
         default=True,
-        server_default="1",
+        server_default=true(),
     )
 
     include_grants: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
         default=True,
-        server_default="1",
+        server_default=true(),
     )
 
     include_partnerships: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
         default=True,
-        server_default="1",
+        server_default=true(),
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -255,6 +268,19 @@ class OpportunityPreference(Base):
 
 class Opportunity(Base):
     __tablename__ = "opportunities"
+
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
+
+
+    original_source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    @property
+    def discovered_from_url(self) -> str:
+        return self.source_url
+
+    @property
+    def canonical_url(self) -> str:
+        return self.original_source_url or self.source_url
 
     id: Mapped[int] = mapped_column(
         Integer,
@@ -325,7 +351,7 @@ class Opportunity(Base):
         Boolean,
         nullable=False,
         default=False,
-        server_default="0",
+        server_default=false(),
         index=True,
     )
 
@@ -357,7 +383,7 @@ class Opportunity(Base):
         Boolean,
         nullable=False,
         default=False,
-        server_default="0",
+        server_default=false(),
         index=True,
     )
 
@@ -422,6 +448,10 @@ class Opportunity(Base):
 class Source(Base):
     __tablename__ = "sources"
 
+    source_role: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="UNKNOWN", server_default="UNKNOWN",
+    )
+
     id: Mapped[int] = mapped_column(
         Integer,
         primary_key=True,
@@ -478,7 +508,7 @@ class Source(Base):
         Boolean,
         nullable=False,
         default=True,
-        server_default="1",
+        server_default=true(),
         index=True,
     )
 
@@ -486,7 +516,7 @@ class Source(Base):
         Boolean,
         nullable=False,
         default=True,
-        server_default="1",
+        server_default=true(),
         index=True,
     )
 
@@ -571,7 +601,7 @@ class Source(Base):
         Boolean,
         nullable=False,
         default=False,
-        server_default="0",
+        server_default=false(),
         index=True,
     )
 
@@ -580,7 +610,366 @@ class Source(Base):
         nullable=True,
     )
 
+    ai_status: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    ai_confidence: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    ai_source_type: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    ai_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    ai_analyzed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    source_fingerprint: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+    )
+
+
+class AutomationJobState(Base):
+    __tablename__ = "automation_job_state"
+
+    job_name: Mapped[str] = mapped_column(
+        String(100),
+        primary_key=True,
+    )
+
+    last_success_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+
+class AIOpportunityVerification(Base):
+    __tablename__ = "ai_opportunity_verification"
+
+    opportunity_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "opportunities.id",
+            ondelete="CASCADE",
+        ),
+        primary_key=True,
+    )
+
+    decision: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+
+    confidence: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    opportunity_type: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+    )
+
+    verifier_model: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+    )
+
+    verified_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+
+class AIOpportunityAnalysis(Base):
+    __tablename__ = "ai_opportunity_analysis"
+
+    workspace_id: Mapped[int | None] = mapped_column(ForeignKey("workspaces.id"), nullable=True, index=True)
+
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    opportunity_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "opportunities.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    source_url: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        unique=True,
+    )
+
+    raw_title: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+    )
+
+    source_name: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+
+    content_fingerprint: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        index=True,
+    )
+
+    opportunity_fingerprint: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+    )
+
+    decision: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    confidence: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    opportunity_type: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    opportunity_status: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    analysis_data: Mapped[dict[str, object] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
+    error_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    analyzed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+
+class OpportunityRequirementExtraction(Base):
+    __tablename__ = "opportunity_requirement_extractions"
+
+    opportunity_id: Mapped[int] = mapped_column(
+        ForeignKey("opportunities.id", ondelete="CASCADE"), primary_key=True,
+    )
+    analysis_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    extraction_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    requirements_data: Mapped[dict | None] = mapped_column(JSON)
+    error_reason: Mapped[str | None] = mapped_column(Text)
+    extracted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CompanyOpportunityReadiness(Base):
+    __tablename__ = "company_opportunity_readiness"
+    __table_args__ = (
+        UniqueConstraint("company_id", "opportunity_id", name="uq_company_opportunity_readiness"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    opportunity_id: Mapped[int] = mapped_column(ForeignKey("opportunities.id", ondelete="CASCADE"), nullable=False, index=True)
+    analysis_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    extraction_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    profile_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    documents_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    readiness_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    result_data: Mapped[dict | None] = mapped_column(JSON)
+    error_reason: Mapped[str | None] = mapped_column(Text)
+    assessed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class OpportunityRequirement(Base):
+    __tablename__ = "opportunity_requirements"
+    __table_args__ = (
+        UniqueConstraint("company_id", "opportunity_id", "requirement_key", name="uq_company_opportunity_requirement"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    opportunity_id: Mapped[int] = mapped_column(ForeignKey("opportunities.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    requirement_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    category: Mapped[str] = mapped_column(String(30), nullable=False)
+    requirement: Mapped[str] = mapped_column(Text, nullable=False)
+    source_field: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_url: Mapped[str | None] = mapped_column(Text)
+    evidence: Mapped[str] = mapped_column(Text, nullable=False)
+    required: Mapped[bool | None] = mapped_column(Boolean)
+    critical: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    requires_document: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    status: Mapped[str] = mapped_column(String(25), nullable=False)
+    availability: Mapped[str] = mapped_column(String(20), nullable=False)
+    confidence: Mapped[int] = mapped_column(Integer, nullable=False)
+    notes: Mapped[str] = mapped_column(Text, nullable=False)
+    next_action: Mapped[str] = mapped_column(Text, nullable=False)
+    document_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+
+
+class CompanyOpportunityTriage(Base):
+    __tablename__ = "company_opportunity_triage"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "opportunity_id", name="uq_company_opportunity_triage"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    opportunity_id: Mapped[int] = mapped_column(
+        ForeignKey("opportunities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    triage_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    match_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    effective_deadline: Mapped[date | None] = mapped_column(Date)
+    effective_status: Mapped[str] = mapped_column(String(30), nullable=False)
+    assessment_date: Mapped[date] = mapped_column(Date, nullable=False)
+    result_data: Mapped[dict | None] = mapped_column(JSON)
+    error_reason: Mapped[str | None] = mapped_column(Text)
+    assessed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CompanyOpportunityMatch(Base):
+    __tablename__ = "company_opportunity_matches"
+    applicant_eligibility: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "opportunity_id",
+            name="uq_company_opportunity_match",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "organizations.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    opportunity_id: Mapped[int] = mapped_column(
+        ForeignKey(
+            "opportunities.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    score: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    match_strength: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    explanation: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    strengths: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+    )
+
+    potential_gaps: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+    )
+
+    eligibility_concerns: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+    )
+
+    recommendation: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    minimum_score: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    qualifies_for_feed: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        index=True,
+    )
+
+    match_fingerprint: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        index=True,
+    )
+
+    error_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    matched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
 
 # Register relationship targets whenever the primary model module is loaded.
 from app.lead_models import Lead as Lead  # noqa: E402
 from app.proposal_models import Proposal as Proposal  # noqa: E402
+
+from app.beta_models import Workspace as Workspace  # noqa: E402

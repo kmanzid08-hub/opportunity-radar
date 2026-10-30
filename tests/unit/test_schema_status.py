@@ -15,8 +15,19 @@ from app.schema_status import SchemaState, inspect_schema
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MANAGED_TABLES = (
+        "workspaces", "beta_users", "beta_sessions", "beta_usage", "workspace_opportunities",
+    "ai_opportunity_analysis",
+    "ai_opportunity_verification",
+    "automation_job_state",
+    "company_opportunity_matches",
+    "company_opportunity_triage",
+    "company_opportunity_readiness",
+    "opportunity_requirements",
+    "opportunity_requirement_extractions",
     "leads",
     "opportunities",
+    "opportunity_preferences",
+    "organizations",
     "proposals",
     "sources",
 )
@@ -82,8 +93,8 @@ def test_fresh_migration_database_is_current(
     status = inspect_schema(database_url)
 
     assert status.state is SchemaState.CURRENT
-    assert status.revision == "20260731_01"
-    assert status.expected_revision == "20260731_01"
+    assert status.revision == "20261030_12"
+    assert status.expected_revision == "20261030_12"
     assert set(MANAGED_TABLES).issubset(status.tables)
 
 

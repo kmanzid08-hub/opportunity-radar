@@ -1,0 +1,9 @@
+{% extends 'beta_base.html' %}{% block title %}Submitted assessments | Opportunity Radar{% endblock %}
+{% block content %}<h1>Submitted assessments</h1><p>Verified notices appear in Discover when their current company match qualifies. Review and rejected results remain here.</p>
+<a class="button" href="/analyze">Analyze an opportunity</a>
+{% for record in records %}<article class="detail-section"><h2>{{ record.raw_title }}</h2>
+<p>{{ record.decision or 'Analysis unavailable' }} · {{ record.opportunity_status or 'Status unknown' }}</p>
+{% if record.error_reason %}<p role="alert">Analysis could not be completed. Submit again to retry.</p>{% endif %}
+{% if record.analysis_data %}<p>{{ record.analysis_data.get('reason', '') }}</p>{% endif %}
+{% if record.opportunity_id %}<a href="/opportunities/{{ record.opportunity_id }}">Open opportunity</a>{% endif %}</article>
+{% else %}<p>No submitted assessments yet. Analyze a tender URL or paste a notice to begin.</p>{% endfor %}{% endblock %}

@@ -13,6 +13,7 @@ from sqlalchemy import select
 from app.database import SessionLocal
 from app.models import Source
 from app.schemas import RawOpportunity
+from app.intelligence.provenance import observed_links
 from app.scanners.base import BaseScanner
 
 
@@ -886,6 +887,7 @@ class CompanyWebsiteScanner(BaseScanner):
             source_url=(
                 page_url
             ),
+            outgoing_links=observed_links(soup, page_url),
 
             description=(
                 description[

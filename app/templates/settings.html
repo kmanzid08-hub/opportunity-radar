@@ -1,0 +1,9 @@
+{% extends 'beta_base.html' %}{% block title %}Account | Opportunity Radar{% endblock %}
+{% block content %}<h1>Account</h1><p>{{ request.state.user.email }} · {{ workspace.name }}</p>
+<p>Private beta access is managed by invitation. Your company profiles, assessments and Pipeline notes are scoped to this workspace. Shared source notices remain available to invited users.</p>
+<p>Allowance: 10 analysis actions per user per hour, up to 9 provider attempts per action, and 90 provider attempts per workspace per day. Failed attempts count toward the allowance.</p>
+<h2>Change password</h2><form action="/settings/password" method="post" class="profile-form-grid"><input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
+<label class="field"><span>Current password</span><input type="password" name="current_password" required maxlength="256" autocomplete="current-password"></label>
+<label class="field"><span>New password (12–256 characters)</span><input type="password" name="password" required minlength="12" maxlength="256" autocomplete="new-password"></label><button class="button" type="submit">Change password</button></form>
+<p>Changing your password signs out your other sessions. For password recovery, contact the beta administrator.</p>
+<form action="/logout" method="post"><input type="hidden" name="csrf_token" value="{{ request.state.csrf }}"><button class="button secondary" type="submit">Sign out</button></form>{% endblock %}

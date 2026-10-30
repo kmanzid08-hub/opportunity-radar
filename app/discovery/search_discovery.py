@@ -370,7 +370,7 @@ def search_brave(
         "User-Agent": "OpportunityRadar/1.0",
     }
 
-    params = {
+    params: dict[str, str | int] = {
         "q": query,
         "count": safe_count,
         "search_lang": "en",

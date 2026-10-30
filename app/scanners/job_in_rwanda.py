@@ -11,6 +11,7 @@ import requests
 from bs4 import BeautifulSoup, Tag
 
 from app.schemas import RawOpportunity
+from app.intelligence.provenance import observed_links
 from app.scanners.base import BaseScanner
 
 
@@ -475,13 +476,16 @@ class JobInRwandaScanner(BaseScanner):
         current: Tag | None = anchor
 
         for _ in range(7):
+            if current is None:
+                break
+
             parent = current.parent
 
             if not isinstance(parent, Tag):
                 break
 
-            class_text = " ".join(
-                parent.get("class", [])
+            class_text = str(
+                parent.get("class", "")
             ).lower()
 
             if any(
@@ -586,6 +590,7 @@ class JobInRwandaScanner(BaseScanner):
             deadline=deadline,
             source_name=self.source_name,
             source_url=listing_url,
+            outgoing_links=observed_links(soup, listing_url),
         )
 
     def _choose_organisation_name(

@@ -1,592 +1,142 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>
-        Business Profile | Opportunity Radar
-    </title>
-
-    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}?v=4">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Companies | Opportunity Radar</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/phase4.css') }}?v=2">
+    <script src="/static/beta.js" defer></script>
 </head>
-
 <body>
-
     <header class="app-header">
-
         <div class="app-header-inner">
-
-            <a href="/" class="brand">
-                <span class="brand-mark">
-                    OR
-                </span>
-
-                <span>
-                    <strong>
-                        Opportunity Radar
-                    </strong>
-
-                    <small>
-                        Business opportunity intelligence
-                    </small>
-                </span>
-            </a>
-
-
-            <div class="topbar-actions">
-
-                <nav class="main-nav" aria-label="Primary navigation">
-                    <a href="/" class="nav-link">
-                        Discover
-                    </a>
-
-                    <a href="/pipeline" class="nav-link">
-                        Pipeline
-                    </a>
-
-                    <a href="/?deadline_filter=archived" class="nav-link">
-                        Archived
-                    </a>
-
-                    <a href="/business-profile" class="nav-link active">
-                        Business Profile
-                    </a>
-                </nav>
-
-            </div>
-
+            <a href="/" class="brand"><span class="brand-mark">OR</span><span>Opportunity Radar</span></a>
+            <nav class="main-nav" aria-label="Primary navigation">
+                <a href="/" class="nav-link">Discover</a>
+                <a href="/pipeline" class="nav-link">Pipeline</a>
+                <a href="/business-profile" class="nav-link active" aria-current="page">Companies</a>
+                <a href="/sources" class="nav-link">Sources</a>
+                <a href="/settings" class="nav-link">Account</a>
+            </nav>
         </div>
-
     </header>
+    <main class="page-shell profile-page-shell">
+        <header class="profile-hero">
+            <p class="eyebrow">Company intelligence</p>
+            <h1>{{ 'Add company' if create_new else 'Make your strengths clear.' }}</h1>
+            {% if create_new %}<p class="lede">Create a separate active company profile. Existing company profiles will not change.</p>{% endif %}
+            <p class="lede">Document what you do, where you work, and the assignments you want. Leave unknown information blank; missing evidence does not mean a missing capability.</p>
+        </header>
 
-
-    <main class="discover-shell profile-page-shell">
-
-        <section class="profile-hero">
-
-            <div>
-
-                <p class="eyebrow">
-                    Workspace setup
-                </p>
-
-                <h1>
-                    Tell Opportunity Radar what your business does.
-                </h1>
-
-                <p class="hero-copy">
-                    Your business profile and preferences will eventually
-                    drive opportunity matching, discovery, ranking and alerts.
-                </p>
-
+        {% if companies %}
+        <form method="get" action="/business-profile" class="toolbar">
+            <label class="field" for="company_id"><span>Company to edit</span></label>
+            <div class="button-row">
+                <select id="company_id" name="company_id">
+                    {% for company in companies %}
+                    <option value="{{ company.id }}" {% if organization and organization.id == company.id %}selected{% endif %}>{{ company.name }}</option>
+                    {% endfor %}
+                </select>
+                <button class="button secondary" type="submit">Open profile</button>
+                <a class="button secondary" href="/business-profile?new=true">Add company</a>
             </div>
-
-        </section>
-
-
-        {% if request.query_params.get("saved") %}
-
-        <div class="profile-success-message">
-            Business profile saved successfully.
-        </div>
-
+        </form>
         {% endif %}
 
+        {% if request.query_params.get('saved') %}
+        <p class="profile-success-message" role="status">Business profile saved successfully.</p>
+        {% endif %}
 
-        <form method="post" action="/business-profile" class="business-profile-form">
+        {% macro rich_field(field, label) %}
+        <label class="profile-field" for="{{ field }}">
+            <span>{{ label }}</span>
+            <textarea id="{{ field }}" name="{{ field }}" rows="3" aria-describedby="rich-input-help">{{ intelligence[field] | join('\n') }}</textarea>
+        </label>
+        {% endmacro %}
 
-            <!-- ================================
-             ORGANIZATION
-        ================================= -->
-
-            <section class="profile-section">
-
-                <div class="profile-section-heading">
-
-                    <div>
-                        <p class="eyebrow">
-                            Organization
-                        </p>
-
-                        <h2>
-                            Business details
-                        </h2>
-
-                        <p>
-                            Basic information about the organization
-                            using this workspace.
-                        </p>
-                    </div>
-
-                </div>
-
-
+        <form method="post" action="/business-profile" class="business-profile-form"><input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
+            <input type="hidden" name="rich_profile" value="true">
+            {% if create_new %}<input type="hidden" name="create_new" value="true">{% endif %}
+            {% if organization %}<input type="hidden" name="organization_id" value="{{ organization.id }}">{% endif %}
+            <details class="profile-section profile-accordion" open>
+                <summary>Company</summary>
                 <div class="profile-form-grid">
-
-                    <label class="profile-field profile-field-wide">
-
-                        <span>
-                            Organization name *
-                        </span>
-
-                        <input type="text" name="name" required value="{{ organization.name if organization else '' }}"
-                            placeholder="Example: Acme Consulting Ltd">
-
-                    </label>
-
-
-                    <label class="profile-field">
-
-                        <span>
-                            Home country
-                        </span>
-
-                        <input type="text" name="country"
-                            value="{{ organization.country or '' if organization else '' }}"
-                            placeholder="Example: Rwanda">
-
-                    </label>
-
-
-                    <label class="profile-field">
-
-                        <span>
-                            City
-                        </span>
-
-                        <input type="text" name="city" value="{{ organization.city or '' if organization else '' }}"
-                            placeholder="Example: Kigali">
-
-                    </label>
-
-
-                    <label class="profile-field">
-
-                        <span>
-                            Industry
-                        </span>
-
-                        <input type="text" name="industry"
-                            value="{{ organization.industry or '' if organization else '' }}"
-                            placeholder="Example: Professional Services">
-
-                    </label>
-
-
-                    <label class="profile-field">
-
-                        <span>
-                            Website
-                        </span>
-
-                        <input type="url" name="website"
-                            value="{{ organization.website or '' if organization else '' }}"
-                            placeholder="https://example.com">
-
-                    </label>
-
-
-                    <label class="profile-field">
-
-                        <span>
-                            Default language
-                        </span>
-
-                        <input type="text" name="default_language"
-                            value="{{ organization.default_language if organization else 'en' }}" placeholder="en">
-
-                    </label>
-
-
-                    <label class="profile-field">
-
-                        <span>
-                            Timezone
-                        </span>
-
-                        <input type="text" name="timezone"
-                            value="{{ organization.timezone or '' if organization else '' }}"
-                            placeholder="Example: Africa/Kigali">
-
-                    </label>
-
-
-                    <label class="profile-field profile-field-full">
-
-                        <span>
-                            Business description
-                        </span>
-
-                        <textarea name="description" rows="4"
-                            placeholder="Describe what your organization does and the types of clients or markets you serve.">{{ organization.description or '' if organization else '' }}</textarea>
-
-                    </label>
-
+                    <label class="profile-field profile-field-full"><span>Company name *</span><input name="name" required maxlength="255" value="{{ organization.name if organization else '' }}"></label>
+                    <label class="profile-field"><span>Website</span><input type="url" name="website" value="{{ organization.website or '' if organization else '' }}" placeholder="https://example.com"></label>
+                    <label class="profile-field"><span>Home country</span><input name="country" value="{{ organization.country or '' if organization else '' }}"></label>
+                    <label class="profile-field"><span>City</span><input name="city" value="{{ organization.city or '' if organization else '' }}"></label>
+                    <label class="profile-field"><span>Primary industry</span><input name="industry" value="{{ organization.industry or '' if organization else '' }}"></label>
+                    <label class="profile-field profile-field-full"><span>Description</span><textarea name="description" rows="4">{{ organization.description or '' if organization else '' }}</textarea></label>
+                    <label class="profile-field"><span>Default language</span><input name="default_language" value="{{ organization.default_language if organization else 'en' }}"></label>
+                    <label class="profile-field"><span>Timezone</span><input name="timezone" value="{{ organization.timezone or '' if organization else '' }}"></label>
                 </div>
+            </details>
 
-            </section>
-
-
-            <!-- ================================
-             GEOGRAPHY
-        ================================= -->
-
-            <section class="profile-section">
-
-                <div class="profile-section-heading">
-
-                    <div>
-                        <p class="eyebrow">
-                            Geography
-                        </p>
-
-                        <h2>
-                            Where do you want opportunities?
-                        </h2>
-
-                        <p>
-                            You can target one country, many countries,
-                            regions or international opportunities.
-                        </p>
-                    </div>
-
-                </div>
-
-
+            <details class="profile-section profile-accordion">
+                <summary>Markets</summary>
+                <p class="quiet">Where you want to work. Separate entries with commas.</p>
                 <div class="profile-form-grid">
-
-                    <label class="profile-field">
-
-                        <span>
-                            Countries
-                        </span>
-
-                        <input type="text" name="countries"
-                            value="{{ preference.countries | join(', ') if preference else '' }}"
-                            placeholder="Rwanda, Kenya, Uganda">
-
-                        <small>
-                            Separate multiple countries with commas.
-                        </small>
-
-                    </label>
-
-
-                    <label class="profile-field">
-
-                        <span>
-                            Regions
-                        </span>
-
-                        <input type="text" name="regions"
-                            value="{{ preference.regions | join(', ') if preference else '' }}"
-                            placeholder="East Africa, Africa, Global">
-
-                    </label>
-
+                    <label class="profile-field"><span>Countries</span><input name="countries" value="{{ preference.countries | join(', ') if preference else '' }}"></label>
+                    <label class="profile-field"><span>Regions / markets</span><input name="regions" value="{{ preference.regions | join(', ') if preference else '' }}"></label>
                 </div>
+            </details>
 
-            </section>
+            <details class="profile-section profile-accordion">
+                <summary>Services</summary>
+                <p class="quiet">Services you actually provide, separated by commas.</p>
+                <label class="profile-field"><span>Services</span><input name="services" value="{{ preference.services | join(', ') if preference else '' }}"></label>
+            </details>
 
+            <details class="profile-section profile-accordion">
+                <summary>Industries</summary>
+                <p class="quiet">Industries your business serves, separated by commas. Record evidence under Experience.</p>
+                <label class="profile-field"><span>Industries served</span><input name="industries" value="{{ preference.industries | join(', ') if preference else '' }}"></label>
+            </details>
 
-            <!-- ================================
-             BUSINESS CAPABILITIES
-        ================================= -->
-
-            <section class="profile-section">
-
-                <div class="profile-section-heading">
-
-                    <div>
-
-                        <p class="eyebrow">
-                            Capabilities
-                        </p>
-
-                        <h2>
-                            What does your business sell or provide?
-                        </h2>
-
-                        <p>
-                            These signals will become part of the
-                            opportunity matching engine.
-                        </p>
-
-                    </div>
-
-                </div>
-
-
+            <p id="rich-input-help" class="quiet">For capabilities, experience, sector preferences and exclusions, enter one item per line. Include specific assignments and evidence where available.</p>
+            {% for heading, fields in intelligence_sections if heading != 'Exclusions' %}
+            <details class="profile-section profile-accordion">
+                <summary>{{ heading }}</summary>
                 <div class="profile-form-grid">
-
-                    <label class="profile-field profile-field-wide">
-
-                        <span>
-                            Industries
-                        </span>
-
-                        <input type="text" name="industries"
-                            value="{{ preference.industries | join(', ') if preference else '' }}"
-                            placeholder="Construction, Healthcare, Finance, ICT">
-
-                    </label>
-
-
-                    <label class="profile-field profile-field-wide">
-
-                        <span>
-                            Services and capabilities
-                        </span>
-
-                        <input type="text" name="services"
-                            value="{{ preference.services | join(', ') if preference else '' }}"
-                            placeholder="Audit, software development, engineering, training">
-
-                    </label>
-
-
-                    <label class="profile-field profile-field-full">
-
-                        <span>
-                            Keywords
-                        </span>
-
-                        <input type="text" name="keywords"
-                            value="{{ preference.keywords | join(', ') if preference else '' }}"
-                            placeholder="financial audit, cybersecurity, road construction, procurement">
-
-                        <small>
-                            Add specific terms that indicate a strong opportunity match.
-                        </small>
-
-                    </label>
-
+                    {% for field, label in fields %}{{ rich_field(field, label) }}{% endfor %}
                 </div>
+            </details>
+            {% endfor %}
 
-            </section>
-
-
-            <!-- ================================
-             OPPORTUNITY TYPES
-        ================================= -->
-
-            <section class="profile-section">
-
-                <div class="profile-section-heading">
-
-                    <div>
-
-                        <p class="eyebrow">
-                            Opportunity types
-                        </p>
-
-                        <h2>
-                            What should Opportunity Radar look for?
-                        </h2>
-
-                    </div>
-
+            <details class="profile-section profile-accordion">
+                <summary>Preferences</summary>
+                <p class="quiet">Desired work is a preference, not proof of experience.</p>
+                <div class="profile-form-grid">
+                    <label class="profile-field"><span>Preferred opportunity types (comma-separated)</span><input name="opportunity_types" value="{{ preference.opportunity_types | join(', ') if preference else '' }}"></label>
+                    {{ rich_field('preferred_sectors', 'Preferred sectors') }}
+                    <label class="profile-field"><span>Additional interests (comma-separated)</span><input name="keywords" value="{{ preference.keywords | join(', ') if preference else '' }}"><small>Context for understanding your preferences; not a keyword score.</small></label>
+                    <label class="profile-field"><span>Languages (comma-separated)</span><input name="languages" value="{{ preference.languages | join(', ') if preference else '' }}"></label>
+                    <label class="profile-field"><span>Minimum match score</span><input type="number" name="minimum_match_score" min="0" max="100" value="{{ preference.minimum_match_score if preference else 0 }}"><small>0 uses the configured default. Higher values make Discover more selective.</small></label>
                 </div>
-
-
-                <label class="profile-field profile-field-full">
-
-                    <span>
-                        Opportunity types
-                    </span>
-
-                    <input type="text" name="opportunity_types"
-                        value="{{ preference.opportunity_types | join(', ') if preference else '' }}"
-                        placeholder="Tender, RFP, RFQ, EOI, Grant, Partnership, Job, Supplier Registration">
-
-                </label>
-
-
                 <div class="profile-checkbox-grid">
-
-                    <label class="profile-checkbox">
-
-                        <input type="checkbox" name="include_tenders" {% if not preference or preference.include_tenders
-                            %} checked {% endif %}>
-
-                        <span>
-                            <strong>
-                                Tenders & procurement
-                            </strong>
-
-                            <small>
-                                Tenders, bids, RFPs, RFQs and EOIs.
-                            </small>
-                        </span>
-
-                    </label>
-
-
-                    <label class="profile-checkbox">
-
-                        <input type="checkbox" name="include_grants" {% if not preference or preference.include_grants
-                            %} checked {% endif %}>
-
-                        <span>
-                            <strong>
-                                Grants
-                            </strong>
-
-                            <small>
-                                Funding and grant opportunities.
-                            </small>
-                        </span>
-
-                    </label>
-
-
-                    <label class="profile-checkbox">
-
-                        <input type="checkbox" name="include_jobs" {% if not preference or preference.include_jobs %}
-                            checked {% endif %}>
-
-                        <span>
-                            <strong>
-                                Jobs & consultancies
-                            </strong>
-
-                            <small>
-                                Roles and consulting assignments.
-                            </small>
-                        </span>
-
-                    </label>
-
-
-                    <label class="profile-checkbox">
-
-                        <input type="checkbox" name="include_partnerships" {% if not preference or
-                            preference.include_partnerships %} checked {% endif %}>
-
-                        <span>
-                            <strong>
-                                Partnerships
-                            </strong>
-
-                            <small>
-                                Partnerships and collaboration opportunities.
-                            </small>
-                        </span>
-
-                    </label>
-
+                    {% for field, label in [('include_tenders', 'Tenders and procurement'), ('include_grants', 'Grants'), ('include_jobs', 'Jobs and consultancies preference'), ('include_partnerships', 'Partnerships'), ('include_no_deadline', 'Notices without published deadlines')] %}
+                    <label class="profile-checkbox"><input type="checkbox" name="{{ field }}" {% if not preference or preference|attr(field) %}checked{% endif %}><span>{{ label }}</span></label>
+                    {% endfor %}
                 </div>
+                <p class="quiet">Preferences do not override opportunity verification; individual job vacancies remain excluded from the company opportunity feed.</p>
+            </details>
 
-            </section>
-
-
-            <!-- ================================
-             MATCHING
-        ================================= -->
-
-            <section class="profile-section">
-
-                <div class="profile-section-heading">
-
-                    <div>
-
-                        <p class="eyebrow">
-                            Matching
-                        </p>
-
-                        <h2>
-                            Opportunity matching preferences
-                        </h2>
-
-                    </div>
-
-                </div>
-
-
+            {% for heading, fields in intelligence_sections if heading == 'Exclusions' %}
+            <details class="profile-section profile-accordion">
+                <summary>{{ heading }}</summary>
+                <p class="quiet">Explicit boundaries carry significant weight, even when other capabilities fit.</p>
                 <div class="profile-form-grid">
-
-                    <label class="profile-field">
-
-                        <span>
-                            Minimum match score
-                        </span>
-
-                        <input type="number" name="minimum_match_score" min="0" max="100"
-                            value="{{ preference.minimum_match_score if preference else 0 }}">
-
-                        <small>
-                            0 shows everything. Higher values make the inbox stricter.
-                        </small>
-
-                    </label>
-
-
-                    <label class="profile-field">
-
-                        <span>
-                            Languages
-                        </span>
-
-                        <input type="text" name="languages"
-                            value="{{ preference.languages | join(', ') if preference else '' }}"
-                            placeholder="English, French, Kinyarwanda">
-
-                    </label>
-
+                    {% for field, label in fields %}{{ rich_field(field, label) }}{% endfor %}
                 </div>
-
-
-                <label class="profile-checkbox profile-checkbox-inline">
-
-                    <input type="checkbox" name="include_no_deadline" {% if not preference or
-                        preference.include_no_deadline %} checked {% endif %}>
-
-                    <span>
-                        <strong>
-                            Include opportunities without a published deadline
-                        </strong>
-
-                        <small>
-                            These opportunities remain subject to the inbox aging policy.
-                        </small>
-                    </span>
-
-                </label>
-
-            </section>
-
-
-            <!-- ================================
-             SAVE
-        ================================= -->
+            </details>
+            {% endfor %}
 
             <div class="profile-save-bar">
-
-                <div>
-
-                    <strong>
-                        Ready to personalize Opportunity Radar?
-                    </strong>
-
-                    <p>
-                        Save your profile now. Matching integration comes next.
-                    </p>
-
-                </div>
-
-                <button type="submit" class="primary-button profile-save-button">
-                    Save business profile
-                </button>
-
+                <div><strong>Keep your profile accurate.</strong><p>Changes apply the next time matching runs.</p></div>
+                <button type="submit" class="button">{{ 'Create company' if create_new else 'Save business profile' }}</button>
+                {% if create_new and companies %}<a class="button secondary" href="/business-profile">Cancel</a>{% endif %}
             </div>
-
         </form>
-
     </main>
-
 </body>
-
 </html>

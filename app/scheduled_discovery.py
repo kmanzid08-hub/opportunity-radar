@@ -3,15 +3,16 @@ from __future__ import annotations
 import os
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from app.core.config import (
     FALSE_VALUES,
     TRUE_VALUES,
     SettingsError,
 )
-from app.database import SessionLocal, engine
+from app.database import SessionLocal
 from app.models import (
+    AutomationJobState,
     OpportunityPreference,
     Organization,
 )
@@ -220,52 +221,22 @@ def _discovery_countries() -> list[str]:
     ]
 
 
-def _ensure_state_table() -> None:
-    """
-    Ensure the scheduler state table exists.
-
-    This preserves the current scheduler behavior.
-    The table should eventually move fully under Alembic.
-    """
-
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS
-                automation_job_state (
-                    job_name VARCHAR(100)
-                        PRIMARY KEY,
-
-                    last_success_at
-                        TIMESTAMP WITH TIME ZONE
-                )
-                """
-            )
-        )
-
-
 def _last_success() -> datetime | None:
     """
     Return the most recent successful Website
     Discovery run.
     """
 
-    with engine.begin() as connection:
-        value = connection.execute(
-            text(
-                """
-                SELECT last_success_at
-                FROM automation_job_state
-                WHERE job_name = :job_name
-                """
-            ),
-            {
-                "job_name": (
-                    JOB_NAME
-                ),
-            },
-        ).scalar_one_or_none()
+    with SessionLocal() as db:
+        state = db.get(
+            AutomationJobState,
+            JOB_NAME,
+        )
+        value = (
+            state.last_success_at
+            if state is not None
+            else None
+        )
 
     if value is None:
         return None
@@ -308,34 +279,22 @@ def _record_success(
     multi-country discovery run.
     """
 
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                """
-                INSERT INTO automation_job_state (
-                    job_name,
-                    last_success_at
-                )
-                VALUES (
-                    :job_name,
-                    :completed_at
-                )
-                ON CONFLICT (job_name)
-                DO UPDATE SET
-                    last_success_at =
-                        EXCLUDED.last_success_at
-                """
-            ),
-            {
-                "job_name": (
-                    JOB_NAME
-                ),
-
-                "completed_at": (
-                    completed_at
-                ),
-            },
+    with SessionLocal() as db:
+        state = db.get(
+            AutomationJobState,
+            JOB_NAME,
         )
+
+        if state is None:
+            state = AutomationJobState(
+                job_name=JOB_NAME,
+                last_success_at=completed_at,
+            )
+            db.add(state)
+        else:
+            state.last_success_at = completed_at
+
+        db.commit()
 
 
 def _empty_summary() -> dict[
@@ -353,8 +312,11 @@ def _empty_summary() -> dict[
         "total_results": 0,
         "candidate_results": 0,
         "added_sources": 0,
+        "accepted_sources": 0,
         "existing_sources": 0,
         "rejected_results": 0,
+        "review_results": 0,
+        "ai_failures": 0,
         "failed_queries": 0,
         "configured_delay_seconds": 0.0,
         "total_runtime_seconds": 0.0,
@@ -381,8 +343,11 @@ def _merge_result(
         "total_results",
         "candidate_results",
         "added_sources",
+        "accepted_sources",
         "existing_sources",
         "rejected_results",
+        "review_results",
+        "ai_failures",
         "failed_queries",
     )
 
@@ -645,8 +610,6 @@ def main() -> int:
     force_discovery = (
         _force_discovery_enabled()
     )
-
-    _ensure_state_table()
 
     now = (
         _utc_now()

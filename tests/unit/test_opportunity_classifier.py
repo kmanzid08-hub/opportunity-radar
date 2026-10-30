@@ -34,7 +34,7 @@ def test_qualifying_opportunity_maps_to_filtered_contract() -> None:
     assert result.source_url == raw_opportunity.source_url
     assert result.description == raw_opportunity.description
     assert result.deadline == raw_opportunity.deadline
-    assert result.match_score == 73
+    assert result.match_score == 75
     assert result.match_reason
 
 

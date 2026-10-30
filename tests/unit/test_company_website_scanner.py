@@ -34,12 +34,13 @@ def test_relevant_links_are_normalized_deduplicated_and_stable() -> None:
     second = scanner._extract_relevant_links(**arguments)
 
     assert first == second == [
+        "https://example.test/procurement/grants?round=2",
+        "https://example.test/tenders/audit-rfp",
         (
             "https://example.test/docs/"
             "consultancy-terms-of-reference.pdf?download=1"
         ),
-        "https://example.test/tenders/audit-rfp",
-        "https://example.test/procurement/grants?round=2",
+        "https://example.test/careers/tender-officer",
         "https://external.example.test/tenders/foreign",
         "https://example.test/opportunities/supplier-registration?cycle=1",
     ]

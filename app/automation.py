@@ -104,6 +104,7 @@ def main() -> int:
         else:
             overall_success = False
     else:
+        assert last_tender_scan is not None
         next_run = last_tender_scan + TENDER_INTERVAL
         print(f"Daily tender scan is not due. Next due: {next_run.isoformat()}")
 
@@ -115,6 +116,7 @@ def main() -> int:
         else:
             overall_success = False
     else:
+        assert last_source_discovery is not None
         next_run = last_source_discovery + DISCOVERY_INTERVAL
         print(f"Website discovery is not due. Next due: {next_run.isoformat()}")
 

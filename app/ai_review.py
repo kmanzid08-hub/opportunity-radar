@@ -4,18 +4,17 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from app.ai_verifier import (
     AIVerificationResult,
     get_model,
     verify_opportunity,
 )
-from app.database import SessionLocal, engine
-from app.models import Opportunity
+from app.database import SessionLocal
+from app.models import AIOpportunityVerification, Opportunity
 
 
-STATE_TABLE = "ai_opportunity_verification"
 DEFAULT_BATCH_SIZE = 5
 
 
@@ -49,37 +48,13 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def ensure_ai_review_table() -> None:
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                f"""
-                CREATE TABLE IF NOT EXISTS {STATE_TABLE} (
-                    opportunity_id INTEGER PRIMARY KEY,
-                    decision VARCHAR(20) NOT NULL,
-                    confidence INTEGER NOT NULL,
-                    reason TEXT,
-                    opportunity_type VARCHAR(200),
-                    verifier_model VARCHAR(200),
-                    verified_at TIMESTAMP WITH TIME ZONE NOT NULL
-                )
-                """
-            )
-        )
-
-
 def reviewed_ids() -> set[int]:
-    ensure_ai_review_table()
-
-    with engine.begin() as connection:
-        rows = connection.execute(
-            text(
-                f"""
-                SELECT opportunity_id
-                FROM {STATE_TABLE}
-                """
+    with SessionLocal() as db:
+        rows = db.scalars(
+            select(
+                AIOpportunityVerification.opportunity_id
             )
-        ).scalars().all()
+        ).all()
 
     return {int(value) for value in rows}
 
@@ -143,50 +118,32 @@ def _record_result(
     opportunity_id: int,
     result: AIVerificationResult,
 ) -> None:
-    ensure_ai_review_table()
-
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                f"""
-                INSERT INTO {STATE_TABLE} (
-                    opportunity_id,
-                    decision,
-                    confidence,
-                    reason,
-                    opportunity_type,
-                    verifier_model,
-                    verified_at
-                )
-                VALUES (
-                    :opportunity_id,
-                    :decision,
-                    :confidence,
-                    :reason,
-                    :opportunity_type,
-                    :verifier_model,
-                    :verified_at
-                )
-                ON CONFLICT (opportunity_id)
-                DO UPDATE SET
-                    decision = EXCLUDED.decision,
-                    confidence = EXCLUDED.confidence,
-                    reason = EXCLUDED.reason,
-                    opportunity_type = EXCLUDED.opportunity_type,
-                    verifier_model = EXCLUDED.verifier_model,
-                    verified_at = EXCLUDED.verified_at
-                """
-            ),
-            {
-                "opportunity_id": opportunity_id,
-                "decision": result.decision,
-                "confidence": result.confidence,
-                "reason": result.reason,
-                "opportunity_type": result.opportunity_type,
-                "verifier_model": get_model(),
-                "verified_at": _utc_now(),
-            },
+    with SessionLocal() as db:
+        record = db.get(
+            AIOpportunityVerification,
+            opportunity_id,
         )
+
+        if record is None:
+            record = AIOpportunityVerification(
+                opportunity_id=opportunity_id,
+                decision=result.decision,
+                confidence=result.confidence,
+                reason=result.reason,
+                opportunity_type=result.opportunity_type,
+                verifier_model=get_model(),
+                verified_at=_utc_now(),
+            )
+            db.add(record)
+        else:
+            record.decision = result.decision
+            record.confidence = result.confidence
+            record.reason = result.reason
+            record.opportunity_type = result.opportunity_type
+            record.verifier_model = get_model()
+            record.verified_at = _utc_now()
+
+        db.commit()
 
 
 def _archive_false_positive(

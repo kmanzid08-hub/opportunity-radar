@@ -46,42 +46,8 @@ class SourceQualityEvaluator:
         "procore.com",
         "odoo.com",
         "lusha.com",
-        "glassdoor.com",
-        "indeed.com",
-        "careers.org",
         "techbehemoths.com",
     }
-
-    LOW_VALUE_DOMAIN_TERMS = (
-        "dictionary",
-        "directory",
-        "yellowpages",
-        "company-list",
-        "business-list",
-        "training-course",
-        "marketing",
-        "seo",
-        "learning-center",
-        "learning-centre",
-        "blogspot",
-        "wordpress",
-    )
-
-    LOW_VALUE_TEXT_TERMS = (
-        "what is an invitation to bid",
-        "definition of",
-        "meaning of",
-        "top companies",
-        "best companies",
-        "company directory",
-        "business directory",
-        "sales leads",
-        "training venue",
-        "training courses in",
-        "accounting firms by country",
-        "learning center",
-        "learning centre",
-    )
 
     OPPORTUNITY_TERMS = (
         "tender",
@@ -200,22 +166,6 @@ class SourceQualityEvaluator:
         combined_text = self.clean_text(
             f"{title} {description} {normalised_url} {discovery_query}"
         ).lower()
-
-        if any(
-            term in domain
-            for term in self.LOW_VALUE_DOMAIN_TERMS
-        ):
-            return self._reject(
-                "The domain appears to be a directory, blog or generic information site."
-            )
-
-        if any(
-            term in combined_text
-            for term in self.LOW_VALUE_TEXT_TERMS
-        ):
-            return self._reject(
-                "The result appears informational rather than an opportunity source."
-            )
 
         path_score = self.calculate_url_relevance(
             normalised_url

@@ -38,7 +38,7 @@ def upgrade() -> None:
         sa.Column(
             "is_expired",
             sa.Boolean(),
-            server_default=sa.text("0"),
+            server_default=sa.false(),
             nullable=False,
         ),
         sa.Column("user_notes", sa.Text(), nullable=True),
@@ -63,7 +63,7 @@ def upgrade() -> None:
         sa.Column(
             "is_lead",
             sa.Boolean(),
-            server_default=sa.text("0"),
+            server_default=sa.false(),
             nullable=False,
         ),
         sa.Column("assigned_to", sa.String(255), nullable=True),
@@ -120,13 +120,13 @@ def upgrade() -> None:
         sa.Column(
             "is_active",
             sa.Boolean(),
-            server_default=sa.text("1"),
+            server_default=sa.true(),
             nullable=False,
         ),
         sa.Column(
             "is_approved",
             sa.Boolean(),
-            server_default=sa.text("1"),
+            server_default=sa.true(),
             nullable=False,
         ),
         sa.Column(
@@ -175,7 +175,7 @@ def upgrade() -> None:
         sa.Column(
             "is_auto_disabled",
             sa.Boolean(),
-            server_default=sa.text("0"),
+            server_default=sa.false(),
             nullable=False,
         ),
         sa.Column("disabled_reason", sa.String(500), nullable=True),
@@ -258,7 +258,7 @@ def upgrade() -> None:
         sa.Column(
             "bid_security_required",
             sa.Boolean(),
-            server_default=sa.text("0"),
+            server_default=sa.false(),
             nullable=False,
         ),
         sa.Column("bid_security_amount", sa.Numeric(18, 2), nullable=True),
@@ -268,7 +268,7 @@ def upgrade() -> None:
         sa.Column(
             "proposal_submitted",
             sa.Boolean(),
-            server_default=sa.text("0"),
+            server_default=sa.false(),
             nullable=False,
         ),
         sa.Column(

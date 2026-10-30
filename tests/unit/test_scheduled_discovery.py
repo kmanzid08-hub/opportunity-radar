@@ -18,19 +18,13 @@ def _prepare_job(
     *,
     now: datetime,
     last_success: datetime | None,
-) -> tuple[Mock, Mock, Mock]:
-    ensure_state = Mock()
+) -> tuple[Mock, Mock]:
     run_discovery = Mock(return_value={"added_sources": 1})
     record_success = Mock()
     clock = Mock(
         side_effect=(now, now + timedelta(minutes=1))
     )
 
-    monkeypatch.setattr(
-        scheduled_discovery,
-        "_ensure_state_table",
-        ensure_state,
-    )
     monkeypatch.setattr(
         scheduled_discovery,
         "_last_success",
@@ -48,11 +42,16 @@ def _prepare_job(
     )
     monkeypatch.setattr(
         scheduled_discovery,
+        "_discovery_countries",
+        lambda: ["Rwanda"],
+    )
+    monkeypatch.setattr(
+        scheduled_discovery,
         "_record_success",
         record_success,
     )
 
-    return ensure_state, run_discovery, record_success
+    return run_discovery, record_success
 
 
 def test_scheduled_not_forced_and_not_due_skips(
@@ -63,14 +62,13 @@ def test_scheduled_not_forced_and_not_due_skips(
         scheduled_discovery.FORCE_SETTING,
         raising=False,
     )
-    ensure_state, run_discovery, record_success = _prepare_job(
+    run_discovery, record_success = _prepare_job(
         monkeypatch,
         now=now,
-        last_success=now - timedelta(days=1),
+        last_success=now - timedelta(hours=12),
     )
 
     assert scheduled_discovery.main() == 0
-    ensure_state.assert_called_once_with()
     run_discovery.assert_not_called()
     record_success.assert_not_called()
 
@@ -83,14 +81,14 @@ def test_scheduled_not_forced_and_due_runs(
         scheduled_discovery.FORCE_SETTING,
         "false",
     )
-    _, run_discovery, record_success = _prepare_job(
+    run_discovery, record_success = _prepare_job(
         monkeypatch,
         now=now,
         last_success=now - timedelta(days=6),
     )
 
     assert scheduled_discovery.main() == 0
-    run_discovery.assert_called_once_with()
+    run_discovery.assert_called_once_with(country="Rwanda")
     record_success.assert_called_once_with(
         now + timedelta(minutes=1)
     )
@@ -104,14 +102,14 @@ def test_manual_forced_and_not_due_runs(
         scheduled_discovery.FORCE_SETTING,
         " YeS ",
     )
-    _, run_discovery, _ = _prepare_job(
+    run_discovery, _ = _prepare_job(
         monkeypatch,
         now=now,
         last_success=now - timedelta(minutes=5),
     )
 
     assert scheduled_discovery.main() == 0
-    run_discovery.assert_called_once_with()
+    run_discovery.assert_called_once_with(country="Rwanda")
 
 
 def test_forced_success_updates_last_run_state(
@@ -123,7 +121,7 @@ def test_forced_success_updates_last_run_state(
         scheduled_discovery.FORCE_SETTING,
         "on",
     )
-    _, _, record_success = _prepare_job(
+    _, record_success = _prepare_job(
         monkeypatch,
         now=now,
         last_success=now,
@@ -172,11 +170,11 @@ def test_invalid_force_value_fails_before_database_access(
         scheduled_discovery.FORCE_SETTING,
         "sometimes",
     )
-    ensure_state = Mock()
+    last_success = Mock()
     monkeypatch.setattr(
         scheduled_discovery,
-        "_ensure_state_table",
-        ensure_state,
+        "_last_success",
+        last_success,
     )
 
     with pytest.raises(
@@ -185,7 +183,7 @@ def test_invalid_force_value_fails_before_database_access(
     ):
         scheduled_discovery.main()
 
-    ensure_state.assert_not_called()
+    last_success.assert_not_called()
 
 
 def test_workflow_force_flag_depends_on_dispatch_event() -> None:

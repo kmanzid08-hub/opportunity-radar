@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -15,8 +16,19 @@ from sqlalchemy.pool import NullPool
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 MANAGED_TABLES = frozenset(
     {
+        "workspaces", "beta_users", "beta_sessions", "beta_usage", "workspace_opportunities",
+        "ai_opportunity_verification",
+        "ai_opportunity_analysis",
+        "automation_job_state",
+        "company_opportunity_matches",
+        "company_opportunity_triage",
+        "company_opportunity_readiness",
+        "opportunity_requirements",
+        "opportunity_requirement_extractions",
         "leads",
         "opportunities",
+        "opportunity_preferences",
+        "organizations",
         "proposals",
         "sources",
     }
@@ -232,7 +244,7 @@ def inspect_schema(database_url: str) -> SchemaStatus:
             revision = None
 
             if version_table_present:
-                revision_rows = connection.execute(
+                revision_rows: Sequence[object] = connection.execute(
                     text("SELECT version_num FROM alembic_version")
                 ).scalars().all()
                 if len(revision_rows) == 1:

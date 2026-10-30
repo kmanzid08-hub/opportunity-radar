@@ -68,7 +68,7 @@ def test_irrelevant_or_incomplete_opportunities_are_filtered_out(
     assert filters.classify_opportunity(opportunity) is None
 
 
-def test_single_service_and_procurement_match_remains_below_threshold(
+def test_single_service_and_procurement_match_reaches_threshold(
     classify_without_contract_failure,
 ) -> None:
     opportunity = _raw_opportunity(
@@ -77,7 +77,10 @@ def test_single_service_and_procurement_match_remains_below_threshold(
         deadline=None,
     )
 
-    assert classify_without_contract_failure(opportunity) is None
+    result = classify_without_contract_failure(opportunity)
+
+    assert result is not None
+    assert result.match_score == 50
 
 
 def test_current_scoring_and_reason_are_characterized(
@@ -87,11 +90,12 @@ def test_current_scoring_and_reason_are_characterized(
 
     assert result is not None
     assert result.category == "Audit"
-    assert result.match_score == 60
+    assert result.match_score == 79
     assert result.match_reason == (
         "deadline detected, external audit, external audit services, "
-        "qualified firms, request for proposals, submission deadline, "
-        "submit a proposal"
+        "notice title: request for proposals, qualified firms, "
+        "request for proposals, submission deadline, submit a proposal, "
+        "type: RFP"
     )
 
 
@@ -111,7 +115,7 @@ def test_repeated_terms_do_not_change_score_or_duplicate_reasons(
 
     assert baseline is not None
     assert repeated is not None
-    assert repeated.match_score == baseline.match_score == 60
+    assert repeated.match_score == baseline.match_score == 79
     assert repeated.match_reason == baseline.match_reason
 
 
@@ -127,7 +131,7 @@ def test_deadline_presence_scores_past_and_future_dates_equally(
 
     assert past is not None
     assert future is not None
-    assert past.match_score == future.match_score == 60
+    assert past.match_score == future.match_score == 79
 
 
 def test_relevance_score_is_capped_at_one_hundred(

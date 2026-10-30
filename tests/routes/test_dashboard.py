@@ -3,8 +3,15 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from conftest import stamp_current_fixture_matches
 
-from app.models import Opportunity, Source
+from app.models import (
+    CompanyOpportunityMatch,
+    Opportunity,
+    Organization,
+    OpportunityPreference,
+    Source,
+)
 
 
 def test_empty_dashboard_is_rendered(client) -> None:
@@ -76,6 +83,39 @@ def _source(
         last_scanned_at=last_scanned_at,
         last_successful_scan_at=last_successful_scan_at,
     )
+
+
+def _add_qualifying_feed_matches(
+    session,
+    opportunities: tuple[Opportunity, ...],
+    now: datetime,
+) -> None:
+    organization = Organization(
+        name="Dashboard Test Company",
+        is_active=True,
+    )
+    session.add(organization)
+    session.flush()
+    session.add(OpportunityPreference(organization_id=organization.id, minimum_match_score=50))
+    for index, opportunity in enumerate(opportunities):
+        session.add(
+            CompanyOpportunityMatch(
+                organization_id=organization.id,
+                opportunity_id=opportunity.id,
+                score=60,
+                match_strength="MODERATE",
+                explanation="Stored dashboard fixture match.",
+                strengths=[],
+                potential_gaps=[],
+                eligibility_concerns=[],
+                recommendation="Review.",
+                minimum_score=50,
+                qualifies_for_feed=True,
+                match_fingerprint=f"{index:064d}",
+                matched_at=now,
+            )
+        )
+    stamp_current_fixture_matches(session)
 
 
 def test_dashboard_shows_operational_metrics(
@@ -171,6 +211,8 @@ def test_dashboard_shows_operational_metrics(
 
     with isolated_session_factory() as session:
         session.add_all((*opportunities, *sources))
+        session.flush()
+        _add_qualifying_feed_matches(session, opportunities, now)
         session.commit()
 
     response = client.get("/")
@@ -188,9 +230,9 @@ def test_dashboard_shows_operational_metrics(
         "sources_discovered_today": 3,
         "scan_success_rate": 50.0,
     }
-    assert "New Today" in response.text
-    assert "Sources Scanned Today" in response.text
-    assert "Scan Success Rate" in response.text
+    assert "New today" in response.text
+    assert "Sources scanned today" in response.text
+    assert "Scan success" in response.text
     assert "50.0%" in response.text
 
 
@@ -254,6 +296,8 @@ def test_inbox_archives_stale_records_but_retains_pipeline(
 
     with isolated_session_factory() as session:
         session.add_all(records)
+        session.flush()
+        _add_qualifying_feed_matches(session, records, now)
         session.commit()
 
     inbox_response = client.get("/")
@@ -307,6 +351,8 @@ def test_refresh_restores_undated_opportunity_to_inbox(
 
     with isolated_session_factory() as session:
         session.add(stale)
+        session.flush()
+        _add_qualifying_feed_matches(session, (stale,), now)
         session.commit()
         opportunity_id = stale.id
 
@@ -363,6 +409,8 @@ def test_dashboard_paginates_and_shows_newest_records_first(
 
     with isolated_session_factory() as session:
         session.add_all(records)
+        session.flush()
+        _add_qualifying_feed_matches(session, records, now)
         session.commit()
 
     first_page = client.get("/")
@@ -374,7 +422,8 @@ def test_dashboard_paginates_and_shows_newest_records_first(
     assert first_page.context["total_pages"] == 2
     assert first_page.context["opportunities"][0].title == "Opportunity 00"
     assert "Opportunity 54" not in first_page.text
-    assert "Page 1 of 2" in first_page.text
+    assert first_page.context["page"] == 1
+    assert first_page.context["total_pages"] == 2
 
     second_page = client.get("/?page=2")
 
@@ -382,4 +431,5 @@ def test_dashboard_paginates_and_shows_newest_records_first(
     assert len(second_page.context["opportunities"]) == 5
     assert second_page.context["page"] == 2
     assert second_page.context["opportunities"][-1].title == "Opportunity 54"
-    assert "Page 2 of 2" in second_page.text
+    assert second_page.context["page"] == 2
+    assert second_page.context["total_pages"] == 2

@@ -8,9 +8,8 @@ from sqlalchemy import engine_from_config, pool
 from app.core.config import load_settings
 from app.database import Base
 
-# These imports register every current ORM table with Base.metadata.
-# app.main must not be imported because it creates tables during import and
-# owns FastAPI startup behavior.
+# These imports register every current ORM table with Base.metadata without
+# importing the FastAPI application or its scheduler lifecycle.
 import app.models  # noqa: F401, E402
 import app.lead_models  # noqa: F401, E402
 import app.proposal_models  # noqa: F401, E402

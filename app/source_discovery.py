@@ -3,11 +3,15 @@ from __future__ import annotations
 import os
 import re
 import time
+from collections.abc import Callable
+from hashlib import sha256
 from dotenv import load_dotenv
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterable, cast
 from urllib.parse import urlparse, urlunparse
 from datetime import datetime, timezone
+
+from bs4 import BeautifulSoup
 
 from app.discovery.categories import (
     DISCOVERY_CATEGORIES,
@@ -17,12 +21,16 @@ from app.discovery.categories import (
 from app.discovery.metadata import (
     merge_discovery_metadata,
 )
+from app.intelligence.gemini_client import GeminiError
+from app.intelligence.schemas import AnalysisDecision, SourceAnalysis
+from app.intelligence.source_analyzer import analyze_source
 from app.source_quality import SourceQualityEvaluator
+from app.source_fetch_diagnostics import SourceFetchError, report_fetch_failure
 
 import requests
 from sqlalchemy import or_, select
 
-from app.database import Base, SessionLocal, engine
+from app.database import SessionLocal
 from app.models import Source
 load_dotenv()
 
@@ -44,6 +52,40 @@ class CategoryStatistics:
     runtime_seconds: float = 0.0
 
 
+@dataclass(frozen=True, slots=True)
+class SourceProcessingOutcome:
+    status: str
+    created: bool
+    analyzed: bool
+    confidence: int | None = None
+
+
+SourceAnalyzer = Callable[..., SourceAnalysis]
+ContentFetcher = Callable[[str], str]
+
+
+class SourceContentError(SourceFetchError):
+    """Raised when a candidate page cannot provide analyzable text."""
+
+
+def build_source_fingerprint(
+    *,
+    url: str,
+    meaningful_content: str,
+    country: str,
+) -> str:
+    """Hash the normalized source identity and semantic input."""
+    normalized_content = " ".join(meaningful_content.split())
+    payload = "\n".join(
+        (
+            url.strip(),
+            country.strip().casefold(),
+            normalized_content,
+        )
+    )
+    return sha256(payload.encode("utf-8")).hexdigest()
+
+
 class SourceDiscovery:
     """
     Discover organisation and opportunity websites for a country.
@@ -63,7 +105,9 @@ class SourceDiscovery:
     )
 
     REQUEST_TIMEOUT = 30
+    CONTENT_REQUEST_TIMEOUT = 20
     REQUEST_DELAY_SECONDS = 1.0
+    MAX_FETCHED_CONTENT_CHARS = 100_000
 
     RESULTS_PER_QUERY = 20
     DISCOVERY_CATEGORIES = DISCOVERY_CATEGORIES
@@ -152,10 +196,14 @@ class SourceDiscovery:
     def __init__(
         self,
         country: str | None = None,
+        *,
+        source_analyzer: SourceAnalyzer | None = None,
+        content_fetcher: ContentFetcher | None = None,
     ) -> None:
         self.country = (
             country
             or os.getenv("DISCOVERY_COUNTRY", "Rwanda")
+            or "Rwanda"
         ).strip()
 
         if not self.country:
@@ -166,6 +214,7 @@ class SourceDiscovery:
             "",
         ).strip()
         self.quality_evaluator = SourceQualityEvaluator()
+        self.source_analyzer = source_analyzer or analyze_source
 
         if not self.api_key:
             raise RuntimeError(
@@ -188,24 +237,34 @@ class SourceDiscovery:
             }
         )
 
+        self.content_session = requests.Session()
+        self.content_session.headers.update(
+            {
+                "Accept": "text/html,application/xhtml+xml,text/plain",
+                "User-Agent": "OpportunityRadar/1.0 source-analysis",
+            }
+        )
+        self.content_fetcher = content_fetcher or self._fetch_source_content
+
     def run(self) -> dict[str, int | float]:
         """
         Run all configured discovery queries.
 
         Returns summary counts.
         """
-        Base.metadata.create_all(
-            bind=engine
-        )
-
         total_results = 0
         candidate_results = 0
         added_sources = 0
         existing_sources = 0
         rejected_results = 0
+        review_results = 0
+        ai_failures = 0
+        accepted_sources = 0
         failed_queries = 0
         queries_executed = 0
         query_runtime_total = 0.0
+        seen_urls: set[str] = set()
+        seen_domains: set[str] = set()
 
         category_queries = tuple(
             (
@@ -288,27 +347,63 @@ class SourceDiscovery:
                             category_stats.rejected += 1
                             continue
 
-                        candidate_results += 1
-                        query_accepted += 1
-                        category_stats.accepted += 1
-                        was_added = self._save_candidate(candidate)
+                        candidate_url = str(candidate["monitor_url"])
+                        candidate_domain = str(candidate["domain"])
+                        if (
+                            candidate_url in seen_urls
+                            or candidate_domain in seen_domains
+                        ):
+                            existing_sources += 1
+                            query_duplicates += 1
+                            category_stats.duplicates += 1
+                            continue
 
-                        if was_added:
+                        seen_urls.add(candidate_url)
+                        seen_domains.add(candidate_domain)
+
+                        candidate_results += 1
+                        outcome = self._save_candidate(candidate)
+
+                        if outcome.created:
                             added_sources += 1
+
+                        if outcome.status == AnalysisDecision.ACCEPT.value:
+                            accepted_sources += 1
+                            query_accepted += 1
+                            category_stats.accepted += 1
                             print(
-                                "  [NEW SOURCE] "
+                                "  [AI ACCEPT] "
                                 f"{candidate['organisation_name']}"
                             )
                             print(f"      {candidate['monitor_url']}")
                             print(
-                                "      Discovery score: "
-                                f"{candidate['discovery_score']}"
+                                "      AI confidence: "
+                                f"{outcome.confidence}"
                             )
                             print(
                                 "      Tags: "
-                                + ", ".join(candidate["tags"])
+                                + ", ".join(
+                                    str(tag)
+                                    for tag in cast(
+                                        Iterable[object],
+                                        candidate["tags"],
+                                    )
+                                )
                             )
+                        elif outcome.status == AnalysisDecision.REVIEW.value:
+                            review_results += 1
+                            print(
+                                "  [AI REVIEW] "
+                                f"{candidate['organisation_name']}"
+                            )
+                        elif outcome.status == AnalysisDecision.REJECT.value:
+                            rejected_results += 1
+                            query_rejected += 1
+                            category_stats.rejected += 1
                         else:
+                            ai_failures += 1
+
+                        if not outcome.created:
                             existing_sources += 1
                             query_duplicates += 1
                             category_stats.duplicates += 1
@@ -365,6 +460,9 @@ class SourceDiscovery:
         print(f"Total queries:                 {queries_executed}")
         print(f"Total results:                 {total_results}")
         print(f"New sources:                   {added_sources}")
+        print(f"AI accepted:                   {accepted_sources}")
+        print(f"AI review:                     {review_results}")
+        print(f"AI failures:                   {ai_failures}")
         print(f"Duplicates:                    {existing_sources}")
         print(f"Rejected:                      {rejected_results}")
         print(f"Failed queries:                {failed_queries}")
@@ -390,8 +488,11 @@ class SourceDiscovery:
             "total_results": total_results,
             "candidate_results": candidate_results,
             "added_sources": added_sources,
+            "accepted_sources": accepted_sources,
             "existing_sources": existing_sources,
             "rejected_results": rejected_results,
+            "review_results": review_results,
+            "ai_failures": ai_failures,
             "failed_queries": failed_queries,
             "configured_delay_seconds": (
                 configured_delay_seconds
@@ -408,14 +509,16 @@ class SourceDiscovery:
         """
         Search Brave and return standardised web results.
         """
+        params: dict[str, str | int] = {
+            "q": query,
+            "count": self.RESULTS_PER_QUERY,
+            "search_lang": "en",
+            "safesearch": "moderate",
+        }
+
         response = self.session.get(
             self.API_URL,
-            params={
-                "q": query,
-                "count": self.RESULTS_PER_QUERY,
-                "search_lang": "en",
-                "safesearch": "moderate",
-            },
+            params=params,
             timeout=self.REQUEST_TIMEOUT,
         )
 
@@ -479,7 +582,10 @@ class SourceDiscovery:
             country=self.country,
         )
 
-        if not assessment.accepted:
+        if not assessment.base_url or not assessment.monitor_url:
+            return None
+
+        if self._is_document_url(assessment.monitor_url):
             return None
 
         parsed = urlparse(
@@ -499,6 +605,7 @@ class SourceDiscovery:
         )
 
         return {
+            "url": assessment.monitor_url,
             "organisation_name": (
                 assessment.organisation_name
             ),
@@ -507,6 +614,10 @@ class SourceDiscovery:
                 assessment.monitor_url
             ),
             "domain": domain,
+            "page_title": result.title,
+            "description": result.description,
+            "country_context": self.country,
+            "discovery_method": "Brave Search API",
             "source_type": (
                 assessment.source_type
             ),
@@ -525,8 +636,8 @@ class SourceDiscovery:
             "url_relevance_score": (
                 assessment.url_relevance_score
             ),
-            "is_active": True,
-            "is_approved": True,
+            "is_active": False,
+            "is_approved": False,
             "is_auto_disabled": False,
             "last_discovered_at": (
                 datetime.now(timezone.utc)
@@ -536,7 +647,7 @@ class SourceDiscovery:
     def _save_candidate(
         self,
         candidate: dict[str, object],
-    ) -> bool:
+    ) -> SourceProcessingOutcome:
         monitor_url = str(
             candidate["monitor_url"]
         )
@@ -552,7 +663,11 @@ class SourceDiscovery:
         )
 
         if not monitor_url or not domain:
-            return False
+            return SourceProcessingOutcome(
+                status="ERROR",
+                created=False,
+                analyzed=False,
+            )
 
         candidate = {
             **candidate,
@@ -560,11 +675,101 @@ class SourceDiscovery:
             "domain": domain,
         }
 
+        try:
+            meaningful_content = self.content_fetcher(monitor_url)
+            if not meaningful_content.strip():
+                raise SourceContentError(
+                    "EMPTY_CONTENT"
+                )
+        except Exception as exc:
+            return self._persist_analysis_error(
+                candidate,
+                "Source content could not be fetched for AI analysis. "
+                + report_fetch_failure(exc),
+            )
+
+        fingerprint = build_source_fingerprint(
+            url=monitor_url,
+            meaningful_content=meaningful_content,
+            country=str(candidate.get("country_context", self.country)),
+        )
+
+        with SessionLocal() as db:
+            existing = db.scalar(
+                select(Source).where(
+                    or_(
+                        Source.monitor_url == monitor_url,
+                        Source.domain == domain,
+                    )
+                )
+            )
+
+            if (
+                existing is not None
+                and existing.source_fingerprint == fingerprint
+                and existing.ai_status
+                in {
+                    AnalysisDecision.ACCEPT.value,
+                    AnalysisDecision.REJECT.value,
+                    AnalysisDecision.REVIEW.value,
+                }
+            ):
+                self._improve_existing_source(
+                    existing=existing,
+                    candidate=candidate,
+                )
+                db.commit()
+                return SourceProcessingOutcome(
+                    status=existing.ai_status,
+                    created=False,
+                    analyzed=False,
+                    confidence=existing.ai_confidence,
+                )
+
+        analysis_input = "\n".join(
+            (
+                f"Page title: {candidate.get('page_title', '')}",
+                f"Search description: {candidate.get('description', '')}",
+                "Website content:",
+                meaningful_content,
+            )
+        )
+
+        try:
+            analysis = self.source_analyzer(
+                url=monitor_url,
+                page_content=analysis_input,
+                source_name_hint=str(
+                    candidate.get("organisation_name", "")
+                )
+                or None,
+                country_hint=str(
+                    candidate.get("country_context", self.country)
+                ),
+            )
+        except GeminiError:
+            return self._persist_analysis_error(
+                candidate,
+                "Gemini source analysis failed.",
+            )
+
+        if not isinstance(analysis, SourceAnalysis):
+            return self._persist_analysis_error(
+                candidate,
+                "Gemini returned an invalid source analysis.",
+            )
+
         discovery_metadata = merge_discovery_metadata(
             None,
-            categories=(str(candidate["discovery_category"]),),
-            queries=(str(candidate["discovery_query"]),),
-            tags=tuple(candidate["tags"]),
+            categories=(str(candidate.get("discovery_category", "")),),
+            queries=(str(candidate.get("discovery_query", "")),),
+            tags=tuple(
+                str(tag)
+                for tag in cast(
+                    Iterable[object],
+                    candidate.get("tags", ()),
+                )
+            ),
         )
 
         with SessionLocal() as db:
@@ -584,50 +789,173 @@ class SourceDiscovery:
                     existing=existing,
                     candidate=candidate,
                 )
+                source = existing
+                created = False
+            else:
+                source = Source(
+                    organisation_name=(
+                        str(candidate.get("organisation_name", "")) or None
+                    ),
+                    base_url=str(candidate.get("base_url", monitor_url)),
+                    monitor_url=monitor_url,
+                    domain=domain,
+                    source_type=str(candidate.get("source_type", "Unknown")),
+                    discovered_from=str(candidate.get("discovered_from", ""))
+                    or None,
+                    discovery_query=discovery_metadata,
+                    confidence_score=float(
+                        str(candidate.get("confidence_score", 0.0))
+                    ),
+                    priority_score=float(
+                        str(candidate.get("priority_score", 0.0))
+                    ),
+                    url_relevance_score=float(
+                        str(candidate.get("url_relevance_score", 0.0))
+                    ),
+                    is_active=False,
+                    is_approved=False,
+                    is_auto_disabled=False,
+                    scan_interval_hours=12,
+                    last_discovered_at=datetime.now(timezone.utc),
+                )
+                db.add(source)
+                created = True
 
-                db.commit()
-                return False
-
-            source = Source(
-                organisation_name=str(
-                    candidate["organisation_name"]
-                ),
-                base_url=str(
-                    candidate["base_url"]
-                ),
-                monitor_url=monitor_url,
-                domain=domain,
-                source_type=str(
-                    candidate["source_type"]
-                ),
-                discovered_from=str(
-                    candidate["discovered_from"]
-                ),
-                discovery_query=discovery_metadata,
-                confidence_score=float(
-                    candidate["confidence_score"]
-                ),
-                priority_score=float(
-                    candidate["priority_score"]
-                ),
-                url_relevance_score=float(
-                    candidate[
-                        "url_relevance_score"
-                    ]
-                ),
-                is_active=True,
-                is_approved=True,
-                is_auto_disabled=False,
-                scan_interval_hours=12,
-                last_discovered_at=(
-                    datetime.now(timezone.utc)
-                ),
+            self._apply_source_analysis(
+                source=source,
+                analysis=analysis,
+                fingerprint=fingerprint,
             )
-
-            db.add(source)
             db.commit()
 
-            return True
+            return SourceProcessingOutcome(
+                status=analysis.decision.value,
+                created=created,
+                analyzed=True,
+                confidence=analysis.confidence,
+            )
+
+    def _persist_analysis_error(
+        self,
+        candidate: dict[str, object],
+        reason: str,
+    ) -> SourceProcessingOutcome:
+        monitor_url = self.quality_evaluator.normalise_url(
+            str(candidate["monitor_url"])
+        )
+        domain = self.quality_evaluator.normalise_domain(
+            str(candidate["domain"])
+        )
+        if not monitor_url or not domain:
+            return SourceProcessingOutcome(
+                status="ERROR",
+                created=False,
+                analyzed=False,
+            )
+
+        with SessionLocal() as db:
+            source = db.scalar(
+                select(Source).where(
+                    or_(
+                        Source.monitor_url == monitor_url,
+                        Source.domain == domain,
+                    )
+                )
+            )
+            created = source is None
+            if source is None:
+                source = Source(
+                    organisation_name=(
+                        str(candidate.get("organisation_name", "")) or None
+                    ),
+                    base_url=str(candidate.get("base_url", monitor_url)),
+                    monitor_url=monitor_url,
+                    domain=domain,
+                    source_type=str(candidate.get("source_type", "Unknown")),
+                    discovered_from=str(candidate.get("discovered_from", ""))
+                    or None,
+                    discovery_query=merge_discovery_metadata(
+                        None,
+                        categories=(
+                            str(candidate.get("discovery_category", "")),
+                        ),
+                        queries=(str(candidate.get("discovery_query", "")),),
+                        tags=tuple(
+                            str(tag)
+                            for tag in cast(
+                                Iterable[object],
+                                candidate.get("tags", ()),
+                            )
+                        ),
+                    ),
+                    confidence_score=float(
+                        str(candidate.get("confidence_score", 0.0))
+                    ),
+                    priority_score=float(
+                        str(candidate.get("priority_score", 0.0))
+                    ),
+                    url_relevance_score=float(
+                        str(candidate.get("url_relevance_score", 0.0))
+                    ),
+                    is_active=False,
+                    is_approved=False,
+                    is_auto_disabled=False,
+                    scan_interval_hours=12,
+                    last_discovered_at=datetime.now(timezone.utc),
+                )
+                db.add(source)
+            else:
+                self._improve_existing_source(
+                    existing=source,
+                    candidate=candidate,
+                )
+
+            source.ai_status = "ERROR"
+            source.ai_confidence = None
+            source.ai_source_type = None
+            source.ai_reason = reason
+            source.ai_analyzed_at = datetime.now(timezone.utc)
+            source.source_fingerprint = None
+            source.is_active = False
+            source.is_approved = False
+            db.commit()
+
+        return SourceProcessingOutcome(
+            status="ERROR",
+            created=created,
+            analyzed=True,
+        )
+
+    @staticmethod
+    def _apply_source_analysis(
+        *,
+        source: Source,
+        analysis: SourceAnalysis,
+        fingerprint: str,
+    ) -> None:
+        source.ai_status = analysis.decision.value
+        source.ai_confidence = analysis.confidence
+        source.ai_source_type = analysis.source_type
+        source.source_role = analysis.source_role.value
+        source.ai_reason = analysis.reason
+        source.ai_analyzed_at = datetime.now(timezone.utc)
+        source.source_fingerprint = fingerprint
+        source.is_approved = analysis.decision is AnalysisDecision.ACCEPT
+        source.is_active = source.is_approved
+
+        if analysis.source_name:
+            source.organisation_name = analysis.source_name
+        elif analysis.organisation:
+            source.organisation_name = analysis.organisation
+
+        if analysis.source_type:
+            source.source_type = analysis.source_type
+
+        if source.is_approved:
+            source.is_auto_disabled = False
+            source.disabled_reason = None
+        else:
+            source.disabled_reason = analysis.reason[:500]
         
     def _improve_existing_source(
         self,
@@ -635,11 +963,11 @@ class SourceDiscovery:
         candidate: dict[str, object],
     ) -> None:
         candidate_confidence = float(
-            candidate["confidence_score"]
+            str(candidate["confidence_score"])
         )
 
         candidate_url_score = float(
-            candidate["url_relevance_score"]
+            str(candidate["url_relevance_score"])
         )
 
         existing_url_score = float(
@@ -648,9 +976,15 @@ class SourceDiscovery:
 
         existing.discovery_query = merge_discovery_metadata(
             existing.discovery_query,
-            categories=(str(candidate["discovery_category"]),),
-            queries=(str(candidate["discovery_query"]),),
-            tags=tuple(candidate["tags"]),
+            categories=(str(candidate.get("discovery_category", "")),),
+            queries=(str(candidate.get("discovery_query", "")),),
+            tags=tuple(
+                str(tag)
+                for tag in cast(
+                    Iterable[object],
+                    candidate.get("tags", ()),
+                )
+            ),
         )
 
         if (
@@ -676,7 +1010,7 @@ class SourceDiscovery:
 
         existing.priority_score = max(
             float(existing.priority_score or 0),
-            float(candidate["priority_score"]),
+            float(str(candidate["priority_score"])),
         )
 
         if not existing.organisation_name:
@@ -693,13 +1027,45 @@ class SourceDiscovery:
                 candidate["source_type"]
             )
 
-        existing.is_approved = True
-        existing.is_active = True
-        existing.is_auto_disabled = False
-        existing.disabled_reason = None
         existing.last_discovered_at = (
             datetime.now(timezone.utc)
         )
+
+    def _fetch_source_content(self, url: str) -> str:
+        response = self.content_session.get(
+            url,
+            timeout=self.CONTENT_REQUEST_TIMEOUT,
+        )
+        if not response.ok:
+            raise SourceContentError(
+                "BLOCKED" if response.status_code in {401, 403, 429, 451} else "HTTP_ERROR",
+                response.status_code,
+            )
+
+        content_type = response.headers.get("Content-Type", "").lower()
+        if content_type and not any(
+            value in content_type
+            for value in ("text/html", "application/xhtml+xml", "text/plain")
+        ):
+            raise SourceContentError(
+                "UNSUPPORTED_CONTENT", response.status_code,
+            )
+
+        if "text/plain" in content_type:
+            text = response.text
+        else:
+            soup = BeautifulSoup(response.text, "html.parser")
+            for element in soup(("script", "style", "noscript", "template")):
+                element.decompose()
+            text = soup.get_text(" ", strip=True)
+
+        meaningful_content = self._clean_text(text)
+        if not meaningful_content:
+            raise SourceContentError(
+                "EMPTY_CONTENT", response.status_code,
+            )
+
+        return meaningful_content[: self.MAX_FETCHED_CONTENT_CHARS]
         
     def _calculate_confidence(
             self,

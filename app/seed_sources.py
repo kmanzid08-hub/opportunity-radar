@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 from sqlalchemy import select
 
-from app.database import Base, SessionLocal, engine
+from app.database import SessionLocal
 from app.models import Source
 
 
@@ -90,10 +90,6 @@ def normalise_domain(
 
 
 def seed_sources() -> None:
-    Base.metadata.create_all(
-        bind=engine
-    )
-
     added_count = 0
     existing_count = 0
 

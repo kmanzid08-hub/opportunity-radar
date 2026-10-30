@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal, cast
 
 import requests
 from dotenv import load_dotenv
@@ -323,7 +323,7 @@ def verify_opportunity(
         ),
     }
 
-    payload = {
+    payload: dict[str, Any] = {
         "model": get_model(),
         "max_tokens": DEFAULT_MAX_TOKENS,
         "system": SYSTEM_PROMPT,
@@ -372,11 +372,11 @@ def verify_opportunity(
 
         data = json.loads(output_text)
 
-        decision = str(
+        decision_value = str(
             data["decision"]
         ).upper().strip()
 
-        if decision not in {
+        if decision_value not in {
             "ACCEPT",
             "REJECT",
             "REVIEW",
@@ -384,6 +384,11 @@ def verify_opportunity(
             return _fallback_result(
                 "Claude returned an invalid decision."
             )
+
+        decision = cast(
+            VerificationDecision,
+            decision_value,
+        )
 
         confidence = int(data["confidence"])
         confidence = max(0, min(100, confidence))

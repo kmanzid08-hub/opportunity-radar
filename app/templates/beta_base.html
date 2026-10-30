@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{% block title %}Opportunity Radar{% endblock %}</title><link rel="stylesheet" href="{{ url_for('static', path='/phase4.css') }}"><script src="/static/beta.js" defer></script></head>
+<body>
+<header class="app-header"><div class="app-header-inner"><a class="brand" href="/">Opportunity Radar</a>
+{% if request.state.user %}<nav class="main-nav" aria-label="Primary navigation"><a class="nav-link" href="/">Discover</a><a class="nav-link" href="/pipeline">Pipeline</a><a class="nav-link" href="/business-profile">Companies</a><a class="nav-link" href="/sources">Sources</a><a class="nav-link" href="/settings">Account</a></nav>{% endif %}</div></header>
+<main class="page-shell"><div class="detail-section">{% block content %}{% endblock %}</div></main>
+</body></html>
