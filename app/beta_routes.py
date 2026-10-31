@@ -71,6 +71,21 @@ def ready():
             type(getattr(exc, "orig", None)).__name__,
             getattr(getattr(exc, "orig", None), "sqlstate", None),
         )
+        try:
+            with database.SessionLocal() as diagnostic_db:
+                db_name, schema_name, version_table = diagnostic_db.execute(
+                    text("SELECT current_database(), current_schema(), "
+                         "to_regclass('alembic_version')::text")
+                ).one()
+                logger.error(
+                    "Readiness database diagnostics: database=%s schema=%s alembic_table=%s",
+                    db_name, schema_name, version_table is not None,
+                )
+        except Exception as diagnostic_exc:
+            logger.error(
+                "Readiness database diagnostics unavailable: exception_type=%s",
+                type(diagnostic_exc).__name__,
+            )
         return error_page("The service is temporarily unavailable.", 503)
     return {"status": "ready"}
 
