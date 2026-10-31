@@ -64,7 +64,13 @@ def ready():
             ).scalar_one()
         if actual != expected:
             return error_page("Database migration is required.", 503)
-    except Exception:
+    except Exception as exc:
+        logger.error(
+            "Readiness check failed: exception_type=%s db_error_type=%s sqlstate=%s",
+            type(exc).__name__,
+            type(getattr(exc, "orig", None)).__name__,
+            getattr(getattr(exc, "orig", None), "sqlstate", None),
+        )
         return error_page("The service is temporarily unavailable.", 503)
     return {"status": "ready"}
 
