@@ -28,6 +28,17 @@
 
         {% if request.state.user and request.state.user.is_admin %}<section class="toolbar"><h2>Add a shared source</h2><p class="quiet">Public source catalog entries are visible to every beta workspace. No website fetch or AI analysis occurs when adding a source.</p><form action="/sources/add" method="post" class="filter-grid"><input type="hidden" name="csrf_token" value="{{ request.state.csrf }}"><label class="field"><span>Source name</span><input name="name" required maxlength="255"></label><label class="field"><span>Notices URL</span><input name="url" type="url" required maxlength="2048"></label><button class="button" type="submit">Add source</button></form></section>{% endif %}
 
+        {% if request.state.user and request.state.user.is_admin %}
+        <section class="toolbar">
+            <h2>Rwanda tender discovery</h2>
+            <p class="quiet">Add Job in Rwanda tenders and consultancies, The New Times tenders portal, and Rwanda ICT Chamber opportunities to the source catalog. This does not fetch websites or consume AI requests.</p>
+            <form action="/sources/add-rwanda" method="post">
+                <input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
+                <button class="button" type="submit">Add Rwanda tender sources</button>
+            </form>
+        </section>
+        {% endif %}
+
         {% set scan_sources = sources|selectattr('is_active')|selectattr('is_approved')|list %}
         {% if companies and scan_sources %}<section class="toolbar"><h2>Scan a selected source</h2><p class="quiet">Checks up to three pages. For inaccessible sites, paste the notice text under Analyze an opportunity.</p>
         <form action="/scan-source" method="post" class="filter-grid" data-analysis><input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
