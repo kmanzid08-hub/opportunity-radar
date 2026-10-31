@@ -236,7 +236,16 @@ class BetaSecurityMiddleware(BaseHTTPMiddleware):
                     expected_origin.rstrip("/"),
                     "https://opportunity-radar-gx12.onrender.com",
                 }
-                origin_matches = not origin or origin.rstrip("/") in allowed_origins
+                # A browser-generated same-origin Fetch Metadata header is an
+                # independent same-origin signal. Keep the CSRF token mandatory.
+                same_origin_fetch = (
+                    request.headers.get("sec-fetch-site") == "same-origin"
+                )
+                origin_matches = (
+                    not origin
+                    or origin.rstrip("/") in allowed_origins
+                    or same_origin_fetch
+                )
                 if not token_matches or not origin_matches:
                     logging.getLogger(__name__).warning(
                         "CSRF submission rejected: path=%s token_matches=%s "
