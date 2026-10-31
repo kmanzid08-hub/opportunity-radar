@@ -1,0 +1,67 @@
+name: Opportunity Radar - Rwanda discovery and matching
+
+on:
+  schedule:
+    # Daily opportunity monitoring, UTC (06:10 in Rwanda).
+    - cron: '10 4 * * *'
+    # Brave discovers additional websites approximately every five days.
+    - cron: '20 2 */5 * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Run opportunity scanning, source discovery, or both'
+        type: choice
+        required: true
+        default: all
+        options:
+          - all
+          - scan
+          - discover
+
+permissions:
+  contents: read
+
+concurrency:
+  group: opportunity-radar-rwanda-automation
+  cancel-in-progress: false
+
+jobs:
+  opportunity-radar:
+    name: Discover and qualify opportunities
+    runs-on: ubuntu-latest
+    timeout-minutes: 85
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      ENABLE_INTERNAL_SCHEDULER: 'false'
+      DISCOVERY_COUNTRY: Rwanda
+      AUTOMATION_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || (github.event.schedule == '20 2 */5 * *' && 'all' || 'scan') }}
+    steps:
+      - name: Check out deployed application branch
+        uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install application
+        run: pip install -r requirements.txt
+
+      - name: Validate required GitHub Actions secrets
+        shell: bash
+        run: |
+          for key in DATABASE_URL BRAVE_API_KEY GEMINI_API_KEY; do
+            if [ -z "${!key}" ]; then
+              echo "::error title=Missing secret::Configure ${key} in repository Settings > Secrets and variables > Actions"
+              exit 1
+            fi
+          done
+
+      - name: Discover sources, scan notices, and match saved companies
+        run: python -m app.automation_run
