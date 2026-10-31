@@ -232,7 +232,11 @@ class BetaSecurityMiddleware(BaseHTTPMiddleware):
                     request.base_url
                 ).rstrip("/")
                 token_matches = hmac.compare_digest(csrf, supplied)
-                origin_matches = not origin or origin == expected_origin
+                allowed_origins = {
+                    expected_origin.rstrip("/"),
+                    "https://opportunity-radar-gx12.onrender.com",
+                }
+                origin_matches = not origin or origin.rstrip("/") in allowed_origins
                 if not token_matches or not origin_matches:
                     logging.getLogger(__name__).warning(
                         "CSRF submission rejected: path=%s token_matches=%s "
