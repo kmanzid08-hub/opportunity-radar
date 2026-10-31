@@ -372,7 +372,7 @@ def add_rwanda_sources():
                     base_url="https://" + domain + "/",
                     domain=domain,
                     source_type="Rwanda tenders and consultancy",
-                    source_role="AGGREGATOR",
+                    source_role="DISCOVERY_ONLY",
                     is_active=True,
                     is_approved=True,
                 ))
