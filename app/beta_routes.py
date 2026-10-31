@@ -346,6 +346,44 @@ def scan_selected_source(
     return RedirectResponse("/assessments?scanned=1", status_code=303)
 
 
+@router.post("/sources/add-rwanda")
+def add_rwanda_sources():
+    """Register public Rwanda procurement portals without fetching or analyzing them."""
+    from sqlalchemy.exc import IntegrityError
+
+    identity = principal.get()
+    if identity is None or not identity.is_admin:
+        raise HTTPException(403, "This action requires a beta administrator")
+
+    sources = (
+        ("Job in Rwanda – Tenders", "https://www.jobinrwanda.com/jobs/tender", "jobinrwanda.com"),
+        ("Job in Rwanda – Consultancies", "https://www.jobinrwanda.com/jobs/consultancy", "jobinrwanda.com"),
+        ("The New Times – Jobs & Tenders", "https://jobs.newtimes.co.rw/", "jobs.newtimes.co.rw"),
+        ("Rwanda ICT Chamber – Opportunities", "https://ictchamber.rw/opportunities", "ictchamber.rw"),
+    )
+    with database.SessionLocal() as db:
+        for name, monitor_url, domain in sources:
+            if db.scalar(select(Source.id).where(Source.monitor_url == monitor_url)):
+                continue
+            with db.begin_nested():
+                db.add(Source(
+                    organisation_name=name,
+                    monitor_url=monitor_url,
+                    base_url="https://" + domain + "/",
+                    domain=domain,
+                    source_type="Rwanda tenders and consultancy",
+                    source_role="AGGREGATOR",
+                    is_active=True,
+                    is_approved=True,
+                ))
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            return error_page("Some sources were added concurrently. Reload and retry.", 409)
+    return RedirectResponse("/sources", status_code=303)
+
+
 @router.post("/sources/add")
 def add_source(
     name: Annotated[str, Form(min_length=1, max_length=255)],
