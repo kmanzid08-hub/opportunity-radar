@@ -240,9 +240,11 @@ class BetaSecurityMiddleware(BaseHTTPMiddleware):
                 if not token_matches or not origin_matches:
                     logging.getLogger(__name__).warning(
                         "CSRF submission rejected: path=%s token_matches=%s "
-                        "origin_matches=%s cookie_present=%s form_token_present=%s",
+                        "origin_matches=%s cookie_present=%s form_token_present=%s "
+                        "origin_header=%r configured_origin=%r",
                         path, token_matches, origin_matches,
                         bool(request.cookies.get(CSRF_COOKIE)), bool(supplied),
+                        origin, expected_origin,
                     )
                     response = error_page(
                         "This form has expired. Reload the page and try again.", 403
