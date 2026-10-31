@@ -231,9 +231,15 @@ class BetaSecurityMiddleware(BaseHTTPMiddleware):
                 expected_origin = os.environ.get("PUBLIC_ORIGIN") or str(
                     request.base_url
                 ).rstrip("/")
-                if not hmac.compare_digest(csrf, supplied) or (
-                    origin and origin != expected_origin
-                ):
+                token_matches = hmac.compare_digest(csrf, supplied)
+                origin_matches = not origin or origin == expected_origin
+                if not token_matches or not origin_matches:
+                    logging.getLogger(__name__).warning(
+                        "CSRF submission rejected: path=%s token_matches=%s "
+                        "origin_matches=%s cookie_present=%s form_token_present=%s",
+                        path, token_matches, origin_matches,
+                        bool(request.cookies.get(CSRF_COOKIE)), bool(supplied),
+                    )
                     response = error_page(
                         "This form has expired. Reload the page and try again.", 403
                     )
