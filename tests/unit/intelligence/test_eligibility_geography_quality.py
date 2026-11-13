@@ -1,5 +1,5 @@
 import json
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import Mock
 
 import pytest
@@ -243,13 +243,12 @@ def test_policy_adjusted_eligibility_is_a_valid_success_cache(
     monkeypatch, isolated_session_factory
 ):
     _configure(monkeypatch, isolated_session_factory)
-    # Temporary diagnostic for the regression test: expose synthetic fixture
-    # failures instead of recording a generic status.
-    def reveal_synthetic_failure(exc, **_kwargs):
-        raise exc
-    monkeypatch.setattr(triage_engine, "record_failure", reveal_synthetic_failure)
     opportunity_id, companies = _seed(
-        isolated_session_factory, analysis=_analysis(eligibility_requirements=[])
+        isolated_session_factory,
+        analysis=_analysis(
+            eligibility_requirements=[],
+            deadline=date.today() + timedelta(days=7),
+        ),
     )
     matcher = Mock(return_value=_match(companies[0], score=95, strength="STRONG"))
     analyzer = Mock(
