@@ -48,11 +48,22 @@
                 <section class="detail-section" aria-labelledby="triage-priority">
                     <p class="eyebrow">Priority for {{ business_profile_name }}</p>
                     <h2 id="triage-priority">{{ opportunity.display_triage.priority.value.replace('_', ' ').title() }}</h2>
-                    <p class="quiet">Readiness: {{ opportunity.display_triage.bid_readiness.value.replace('_', ' ').title() }} · Urgency: {{ opportunity.display_triage.urgency.value.title() }} · Estimated effort: {{ opportunity.display_triage.estimated_effort.value.title() }}</p>
+                    <p class="quiet">Readiness: {{ opportunity.display_triage.bid_readiness.value.replace('_', ' ').title() }} · Deadline urgency: {{ opportunity.display_triage.urgency.value.title() }} · Estimated effort: {{ opportunity.display_triage.estimated_effort.value.title() }}</p>
                     <h3>Why</h3>
                     <ul>{% for reason in opportunity.display_triage.key_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
                     <h3>Next action</h3>
                     <p>{{ opportunity.display_triage.recommended_next_action }}</p>
+                </section>
+                {% endif %}
+
+                {% if opportunity.display_mandatory_checks %}
+                <section class="detail-section" aria-labelledby="bid-decision">
+                    <p class="eyebrow">Bid decision · {{ business_profile_name }}</p>
+                    <h2 id="bid-decision">Verify eligibility before pursuing</h2>
+                    <p class="quiet">A strong technical match does not establish that the company or proposed team meets mandatory tender criteria. Deadline urgency remains separate from bidder eligibility.</p>
+                    <h3>Evidence to confirm</h3>
+                    <ul>{% for check in opportunity.display_mandatory_checks %}<li>{{ check }}</li>{% endfor %}</ul>
+                    <p>Check the original terms of reference and obtain supporting qualifications, references and bidder-type confirmation before investing in a full proposal.</p>
                 </section>
                 {% endif %}
 
