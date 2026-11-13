@@ -254,13 +254,30 @@ class GeminiClient:
         *,
         system_instruction: str | None = None,
     ) -> str:
-        response = self._generate(
-            prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0,
-            ),
-        )
+        try:
+            response = self._generate(
+                prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0,
+                ),
+            )
+        except GeminiAPIError as exc:
+            if exc.diagnostic is not None and exc.diagnostic.category == "QUOTA_EXCEEDED":
+                from app.intelligence import openai_fallback
+
+                if openai_fallback.fallback_enabled():
+                    logger.warning("Gemini quota exhausted; switching to configured OpenAI backup for text")
+                    try:
+                        return openai_fallback.generate_text(
+                            prompt, system_instruction=system_instruction
+                        )
+                    except openai_fallback.OpenAIFallbackError:
+                        raise GeminiAPIError(
+                            "Both Gemini and OpenAI backup are unavailable.",
+                            diagnostic=exc.diagnostic,
+                        ) from None
+            raise
         text = getattr(response, "text", None)
         if not isinstance(text, str) or not text.strip():
             diagnostic = GeminiDiagnostic("STRUCTURED_OUTPUT_ERROR")
@@ -287,19 +304,42 @@ class GeminiClient:
             "ReadinessAnalysis": "readiness",
             "ConnectionCheck": "connection diagnostic",
         }.get(response_schema.__name__, "structured generation")
-        response = self._generate(
-            prompt,
-            operation=operation,
-            before_attempt=before_attempt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0,
-                response_mime_type="application/json",
-                response_schema=sanitize_gemini_schema(
-                    response_schema.model_json_schema()
+        try:
+            response = self._generate(
+                prompt,
+                operation=operation,
+                before_attempt=before_attempt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0,
+                    response_mime_type="application/json",
+                    response_schema=sanitize_gemini_schema(
+                        response_schema.model_json_schema()
+                    ),
                 ),
-            ),
-        )
+            )
+        except GeminiAPIError as exc:
+            if exc.diagnostic is not None and exc.diagnostic.category == "QUOTA_EXCEEDED":
+                from app.intelligence import openai_fallback
+
+                if openai_fallback.fallback_enabled():
+                    logger.warning(
+                        "Gemini quota exhausted; switching to configured OpenAI backup for %s",
+                        self._stage(operation),
+                    )
+                    try:
+                        return openai_fallback.generate_structured(
+                            prompt,
+                            response_schema,
+                            system_instruction=system_instruction,
+                            before_attempt=before_attempt,
+                        )
+                    except openai_fallback.OpenAIFallbackError:
+                        raise GeminiAPIError(
+                            "Both Gemini and OpenAI backup are unavailable.",
+                            diagnostic=exc.diagnostic,
+                        ) from None
+            raise
 
         try:
             parsed = getattr(response, "parsed", None)
