@@ -1,11 +1,9 @@
-name: Opportunity Radar - Rwanda discovery and matching
+name: Manual AI opportunity matching
 
+# The working website-discovery and daily-tender-scan workflows already run
+# automatically. This AI-enabled integration is manual-only to avoid duplicate
+# crawling, repeated Gemini calls and redundant failures.
 on:
-  schedule:
-    # Daily opportunity monitoring, UTC (06:10 in Rwanda).
-    - cron: '10 4 * * *'
-    # Brave discovers additional websites approximately every five days.
-    - cron: '20 2 */5 * *'
   workflow_dispatch:
     inputs:
       mode:
