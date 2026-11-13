@@ -326,7 +326,8 @@ def test_company_specific_priorities_and_failure_isolation(
     )
     assert [item.company_id for item in outcomes] == company_ids
     assert [item.status for item in outcomes] == ["ERROR", "TRIAGED", "TRIAGED"]
-    assert [item.result.priority.value for item in outcomes[1:]] == ["HIGH", "LOW"]
+    # Unverified bidder type caps otherwise strong technical fit to review/medium.
+    assert [item.result.priority.value for item in outcomes[1:]] == ["MEDIUM", "LOW"]
     with isolated_session_factory() as db:
         assert db.scalar(select(func.count()).select_from(CompanyOpportunityMatch)) == 3
         assert (
@@ -547,11 +548,12 @@ def test_company_selection_displays_only_that_company_triage(
     )
     triage_verified_opportunity(opportunity_id, matcher=matcher, analyzer=analyzer)
     all_view = client.get("/")
-    assert "Priority: High" in all_view.text
+    assert "Priority: Medium" in all_view.text
+    assert "Bid decision: Verify eligibility" in all_view.text
     assert "Priority: Low" not in all_view.text
     individual = client.get(f"/?company_id={second}")
     assert "Priority: Low" in individual.text
-    assert "Priority: High" not in individual.text
+    assert "Priority: Medium" not in individual.text
     for company_id, expected, absent in [
         (first, "First company's stored reasoning", "Second company"),
         (second, "Second company's stored reasoning", "First company"),
