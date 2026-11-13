@@ -29,7 +29,7 @@ jobs:
       - name: Test capability versus eligibility gates
         run: python -m pytest -q tests/test_bid_priority_guard.py
       - name: Run broader matching, eligibility and dashboard regression tests
-        run: python -m pytest -vv tests/unit/intelligence/test_eligibility_geography_quality.py::test_policy_adjusted_eligibility_is_a_valid_success_cache
+        run: python -m pytest -q tests -k 'triage or eligibility or matching or dashboard or bid_priority'
       - name: Compile all website templates
         shell: bash
         run: |
