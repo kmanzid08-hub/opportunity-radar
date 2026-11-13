@@ -1,0 +1,57 @@
+name: Opportunity Radar - one-time read-only matching diagnostic
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/diagnose-opportunity-feed.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      ENABLE_INTERNAL_SCHEDULER: 'false'
+    steps:
+      - name: Check out application
+        uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Inspect aggregate opportunity and business profile counts only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from sqlalchemy import text
+          from app.database import engine
+          checks = {
+              "active_sources": "SELECT count(*) FROM sources WHERE is_active AND is_approved",
+              "sources_scanned_past_24h": "SELECT count(*) FROM sources WHERE last_scanned_at >= now() - interval '24 hours'",
+              "active_companies_total": "SELECT count(*) FROM organizations WHERE is_active",
+              "active_companies_owned": "SELECT count(*) FROM organizations WHERE is_active AND workspace_id IS NOT NULL",
+              "active_companies_unassigned": "SELECT count(*) FROM organizations WHERE is_active AND workspace_id IS NULL",
+              "active_owned_companies_with_preferences": "SELECT count(*) FROM organizations o JOIN opportunity_preferences p ON p.organization_id=o.id WHERE o.is_active AND o.workspace_id IS NOT NULL",
+              "owned_company_workspaces": "SELECT count(DISTINCT workspace_id) FROM organizations WHERE workspace_id IS NOT NULL AND is_active",
+              "active_users": "SELECT count(*) FROM beta_users WHERE is_active",
+              "shared_opportunities": "SELECT count(*) FROM opportunities WHERE workspace_id IS NULL",
+              "shared_unexpired_opportunities": "SELECT count(*) FROM opportunities WHERE workspace_id IS NULL AND is_expired IS FALSE",
+              "shared_ai_analyses": "SELECT count(*) FROM ai_opportunity_analysis WHERE workspace_id IS NULL",
+              "matches_total": "SELECT count(*) FROM company_opportunity_matches",
+              "matches_for_owned_companies": "SELECT count(*) FROM company_opportunity_matches m JOIN organizations o ON o.id=m.organization_id WHERE o.workspace_id IS NOT NULL",
+              "qualifying_matches": "SELECT count(*) FROM company_opportunity_matches WHERE qualifies_for_feed IS TRUE AND error_reason IS NULL",
+              "qualifying_matches_for_owned_companies": "SELECT count(*) FROM company_opportunity_matches m JOIN organizations o ON o.id=m.organization_id WHERE o.workspace_id IS NOT NULL AND m.qualifies_for_feed IS TRUE AND m.error_reason IS NULL",
+              "match_errors": "SELECT count(*) FROM company_opportunity_matches WHERE error_reason IS NOT NULL",
+          }
+          with engine.connect() as conn:
+              for label, sql in checks.items():
+                  print(f"CHECK {label}: {conn.execute(text(sql)).scalar_one()}", flush=True)
+          PY
