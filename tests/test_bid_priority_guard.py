@@ -1,6 +1,8 @@
 """Bid prioritization must distinguish capability fit from mandatory eligibility."""
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from app.intelligence import triage_policy
@@ -119,7 +121,7 @@ def test_full_policy_caps_urgent_even_with_strong_match():
     assert match().score == 85
     assert validate_triage(
         result, analysis=item, match=match(), minimum_score=70,
-        deadline=None, status="ACTIVE",
+        deadline=date(2026, 11, 20), status="ACTIVE",
     ) == result
 
 
