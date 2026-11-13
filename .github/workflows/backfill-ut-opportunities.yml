@@ -1,0 +1,32 @@
+name: Backfill UT CPA and UT Consulting opportunities
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/backfill-ut-opportunities.yml]
+
+permissions:
+  contents: read
+concurrency:
+  group: opportunity-radar-data-pipeline
+  cancel-in-progress: false
+
+jobs:
+  match:
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      MATCH_BACKFILL_LIMIT: '50'
+      ENABLE_INTERNAL_SCHEDULER: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Match remaining verified opportunities against both companies
+        run: python -m app.backfill_matches
