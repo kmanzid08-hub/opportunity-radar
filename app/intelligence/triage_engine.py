@@ -13,7 +13,11 @@ from app import database
 from app.intelligence.gemini_client import load_gemini_config
 from app.intelligence.downstream_diagnostics import record_failure
 from app.intelligence.eligibility import individual_only_conflict, applicant_eligibility_state
-from app.intelligence.triage_policy import apply_triage_policy
+from app.intelligence.triage_policy import (
+    apply_triage_policy,
+    cap_unverified_bid_priority,
+    pending_mandatory_checks,
+)
 from app.intelligence.matching_engine import (
     CompanyMatchOutcome,
     CompanyMatcher,
@@ -104,6 +108,8 @@ def validate_triage(
     }
     if high and weak:
         raise ValueError("Weak matches cannot have high priority")
+    if high and pending_mandatory_checks(analysis, result):
+        raise ValueError("Unverified mandatory evidence cannot have high bid priority")
     if result.bid_readiness is BidReadiness.READY and (
         result.critical_gaps
         or result.eligibility_risks
@@ -238,7 +244,12 @@ def triage_verified_opportunity(
             except ValueError:
                 pass
             else:
-                results.append(TriageOutcome(profile.company_id, "CACHED", cached))
+                # Historical stored HIGH ratings may predate the hard-evidence
+                # policy. Preserve the source record but return a safe decision.
+                results.append(TriageOutcome(
+                    profile.company_id, "CACHED",
+                    cap_unverified_bid_priority(cached, analysis),
+                ))
                 continue
         result = None
         error = None
