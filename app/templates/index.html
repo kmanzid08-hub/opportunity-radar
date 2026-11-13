@@ -179,7 +179,16 @@
         </nav>
         {% endif %}
         {% else %}
-        <section class="empty-state"><h2>No opportunities found</h2><p>No matching opportunities yet. Analyze a tender or review your selected sources.</p><a class="button" href="/analyze">Analyze an opportunity</a><a class="button secondary" href="/">Clear filters</a></section>
+        {% if not business_profile_active %}
+        <section class="empty-state">
+            <h2>Create your first business profile</h2>
+            <p>Opportunity Radar is discovering and storing notices, but there is no active company to match them against. Add your services, expertise, and preferred opportunities to start receiving qualified recommendations.</p>
+            <a class="button" href="/business-profile?new=true">Create business profile</a>
+            <a class="button secondary" href="/sources">View monitored sources</a>
+        </section>
+        {% else %}
+        <section class="empty-state"><h2>No qualified matches yet</h2><p>Your business is configured, but no current opportunity has passed the match and eligibility requirements. Verify your business preferences or analyze a specific tender.</p><a class="button" href="/business-profile">Review business profile</a><a class="button secondary" href="/analyze">Analyze an opportunity</a></section>
+        {% endif %>
         {% endif %}
     </main>
 </body>
