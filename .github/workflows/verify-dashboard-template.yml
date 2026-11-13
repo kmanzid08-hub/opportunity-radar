@@ -23,6 +23,20 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install required tools
-        run: pip install jinja2 pytest
+        run: pip install jinja2
       - name: Check all Jinja templates
-        run: python -m pytest -q tests/test_template_syntax.py
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from jinja2 import Environment, FileSystemLoader
+          root = Path("app/templates")
+          loader = Environment(loader=FileSystemLoader(str(root)))
+          paths = sorted(path.relative_to(root).as_posix() for path in root.rglob("*.html"))
+          for path in paths:
+              loader.get_template(path)
+              print("VALID:", path)
+          assert paths, "No templates found"
+          assert "{% endif %>" not in (root / "index.html").read_text()
+          print(f"ALL_TEMPLATES_VALID: {len(paths)} templates compiled")
+          PY
