@@ -93,16 +93,24 @@ def test_unknown_applicant_caps_high_priority_but_preserves_technical_fit():
     assert "unverified_mandatory_evidence_priority_cap" in protected.policy_adjustments
 
 
-def test_priority_gate_rejects_high_with_unknown_applicant():
-    with pytest.raises(ValueError, match="Unverified mandatory evidence"):
-        validate_triage(
-            triage(),
-            analysis=analysis(),
-            match=match(),
-            minimum_score=70,
-            deadline=None,
-            status="ACTIVE",
-        )
+def test_generic_validator_keeps_legacy_triage_contract_separate_from_bid_policy():
+    # The model validator checks structured consistency; the pursuit policy
+    # independently caps the saved/displayed attention priority.
+    item = analysis()
+    original = triage(
+        bid_readiness=BidReadiness.NEEDS_WORK,
+        urgency=Urgency.UNKNOWN,
+    )
+    checked = validate_triage(
+        original,
+        analysis=item,
+        match=match(),
+        minimum_score=70,
+        deadline=None,
+        status="ACTIVE",
+    )
+    assert checked == original
+    assert cap_unverified_bid_priority(checked, item).priority is Priority.MEDIUM
 
 
 def test_full_policy_caps_urgent_even_with_strong_match():
