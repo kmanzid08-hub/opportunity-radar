@@ -305,6 +305,7 @@ def test_company_specific_priorities_and_failure_isolation(
     _configure(monkeypatch, isolated_session_factory)
     opportunity_id, company_ids = _seed(
         isolated_session_factory,
+        analysis=_analysis(deadline=TODAY + timedelta(days=3)),
         companies=[
             {"name": "Assurance Company"},
             {"name": "Research Company"},
