@@ -899,6 +899,19 @@ def apply_stored_opportunity_analysis(
     setattr(opportunity, "ai_applicant_eligibility_note", applicant_eligibility_statement(analysis) if analysis else "Applicant eligibility requires confirmation; no structured analysis is available.")
     # Legacy stored match prose/state cannot override the current evidence contract.
     setattr(opportunity, "display_applicant_eligibility", applicant_eligibility_state(analysis).value if analysis else "UNKNOWN")
+    from app.intelligence.triage_policy import pending_mandatory_checks
+
+    # A displayed high capability score is never evidence that mandatory
+    # bidder, personnel, licence, or prior-experience requirements are met.
+    stored_triage = getattr(opportunity, "display_triage", None)
+    setattr(
+        opportunity,
+        "display_mandatory_checks",
+        pending_mandatory_checks(analysis, stored_triage)
+        if analysis is not None else [
+            "Review the authoritative tender notice before deciding to bid."
+        ],
+    )
     setattr(
         opportunity,
         "ai_buyer",
