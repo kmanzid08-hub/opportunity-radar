@@ -55,3 +55,6 @@ jobs:
 
       - name: Scan and qualify opportunities with AI
         run: python -m app.automation_run
+
+      - name: Match existing verified notices to new business profiles
+        run: python -m app.backfill_matches
