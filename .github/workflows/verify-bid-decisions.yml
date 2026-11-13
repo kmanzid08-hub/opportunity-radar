@@ -1,4 +1,4 @@
-name: Verify evidence-first bid decisions
+name: Verify evidence-first bid decisions and compatibility
 on:
   push:
     branches: [main]
