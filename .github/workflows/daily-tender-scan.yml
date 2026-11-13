@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: opportunity-radar-tender-scan
+  group: opportunity-radar-data-pipeline
   cancel-in-progress: false
 
 jobs:
