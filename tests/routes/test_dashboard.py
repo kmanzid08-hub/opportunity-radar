@@ -19,7 +19,7 @@ def test_empty_dashboard_is_rendered(client) -> None:
 
     assert response.status_code == 200
     assert "Opportunity Radar" in response.text
-    assert "No opportunities found" in response.text
+    assert "Create your first business profile" in response.text
 
 
 def _opportunity(
