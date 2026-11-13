@@ -125,12 +125,15 @@
         <section class="opportunity-list" aria-label="Matched opportunities">
             {% for opportunity in opportunities %}
             <article class="opportunity-row">
-                <div aria-label="Match score {{ opportunity.display_match_score }}">
+                <div aria-label="Technical capability match score {{ opportunity.display_match_score }}">
                     <div class="score">{{ opportunity.display_match_score }}</div>
-                    <span class="score-caption">{{ (opportunity.display_match_strength or 'match').replace('_', ' ').title() }}</span>
+                    <span class="score-caption">Technical fit: {{ (opportunity.display_match_strength or 'match').replace('_', ' ').title() }}</span>
                 </div>
                 <div>
                     <span class="status-pill">{{ opportunity.status }}</span>
+                    {% if opportunity.display_mandatory_checks %}
+                    <span class="status-pill">Bid decision: Verify eligibility</span>
+                    {% endif %}
                     {% if opportunity.display_triage %}
                     <span class="status-pill">Priority: {{ opportunity.display_triage.priority.value.replace('_', ' ').title() }}</span>
                     <span class="quiet">Urgency: {{ opportunity.display_triage.urgency.value.title() }}</span>
@@ -150,6 +153,9 @@
                     <p class="quiet">Bid readiness: {{ opportunity.display_readiness.overall_status.value.replace('_', ' ').title() }} · {{ opportunity.display_readiness.missing_count + opportunity.display_readiness.confirmation_count }} preparation items outstanding</p>
                     {% endif %}
                     <p><strong>Applicant eligibility: {{ opportunity.display_applicant_eligibility or 'UNKNOWN' }}</strong> — {{ opportunity.ai_applicant_eligibility_note }}</p>
+                    {% if opportunity.display_mandatory_checks %}
+                    <p class="quiet"><strong>Before pursuing:</strong> {{ opportunity.display_mandatory_checks[:2] | join(' ') }}</p>
+                    {% endif %}
                     {% if opportunity.display_match_reason %}<p class="match-reason"><strong>Capability assessment (not proof of eligibility):</strong> {{ opportunity.display_match_reason }}</p>{% endif %}
                     {% if opportunity.display_match_gaps or opportunity.display_eligibility_concerns %}
                     <details class="match-details">
