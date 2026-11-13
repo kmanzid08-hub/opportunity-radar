@@ -5,7 +5,7 @@ on:
     - cron: "0 4 * * *"
       timezone: "Africa/Kigali"
   workflow_dispatch:
-  # Permit a deliberately tagged workflow-file commit to launch verification.
+  # Permit a tagged workflow-file commit to scan saved sources and match both active companies.
   # Ordinary code pushes do not start extra production scans.
   push:
     branches:
