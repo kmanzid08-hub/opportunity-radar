@@ -1,0 +1,40 @@
+name: Verify OpenAI fallback integration
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/verify-openai-fallback.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Check out updated AI integration
+        uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Compile application
+        run: python -m compileall -q app
+      - name: Test Gemini quota fallback without real API calls
+        run: pytest -q tests/test_openai_fallback.py
+      - name: Verify structured schema conversion
+        run: |
+          python - <<'PY'
+          from openai.lib._pydantic import to_strict_json_schema
+          from app.intelligence.schemas import SourceAnalysis, OpportunityAnalysis, CompanyMatch
+          from app.intelligence.triage_schemas import TriageResult
+          for model in (SourceAnalysis, OpportunityAnalysis, CompanyMatch, TriageResult):
+              schema = to_strict_json_schema(model)
+              assert schema["type"] == "object", model.__name__
+              print("Compatible schema:", model.__name__)
+          PY
