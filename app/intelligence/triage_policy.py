@@ -10,7 +10,7 @@ from app.intelligence.eligibility import (
     applicant_eligibility_statement,
 )
 from app.intelligence.schemas import CompanyMatch, EvidenceStatus, OpportunityAnalysis
-from app.intelligence.triage_schemas import BidReadiness, TriageResult
+from app.intelligence.triage_schemas import BidReadiness, Priority, TriageResult
 
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,67 @@ def experience_context(profile: Mapping[str, object] | None) -> dict[str, str]:
         if documented
         else "NOT_DOCUMENTED",
     }
+
+
+def pending_mandatory_checks(
+    analysis: OpportunityAnalysis,
+    result: TriageResult | None,
+) -> list[str]:
+    """Unverified hard requirements, not assertions that the company is ineligible.
+
+    This is a bid-decision gate, separate from the technical capability match.
+    The company profile currently lacks independently verified qualification
+    and supporting-contract evidence fields.
+    """
+    reasons: list[str] = []
+    if (
+        applicant_eligibility_state(analysis) is not EvidenceStatus.CONFIRMED
+        or (result is not None and result.eligibility_evidence is not EvidenceStatus.CONFIRMED)
+    ):
+        reasons.append("Confirm that a registered company may submit this tender.")
+    if analysis.qualification_requirements:
+        reasons.append(
+            "Verify the stated professional qualifications, licences or registrations "
+            "against the proposed team and company documents."
+        )
+    if analysis.experience_requirements and (
+        result is None or result.experience_evidence is not EvidenceStatus.CONFIRMED
+    ):
+        reasons.append(
+            "Provide evidence of assignments meeting the tender's stated "
+            "experience requirements."
+        )
+    return reasons
+
+
+def cap_unverified_bid_priority(
+    result: TriageResult,
+    analysis: OpportunityAnalysis,
+) -> TriageResult:
+    """Conservative priority guard for newly generated and saved triage.
+
+    Never lower the capability-match score, change the tender deadline, or
+    treat missing evidence as proof of ineligibility.
+    """
+    checks = pending_mandatory_checks(analysis, result)
+    if not checks or result.priority not in {Priority.HIGH, Priority.URGENT}:
+        return result
+    data = result.model_dump()
+    data["priority"] = Priority.MEDIUM
+    data["priority_score"] = min(result.priority_score, 69)
+    if result.bid_readiness in {BidReadiness.READY, BidReadiness.MOSTLY_READY}:
+        data["bid_readiness"] = BidReadiness.NEEDS_WORK
+    data["key_reasons"] = list(dict.fromkeys([
+        *result.key_reasons,
+        "High capability fit does not establish eligibility to bid.",
+        *checks,
+    ]))
+    data["recommended_next_action"] = "Before committing bid resources: " + " ".join(checks)
+    data["policy_adjustments"] = list(dict.fromkeys([
+        *result.policy_adjustments,
+        "unverified_mandatory_evidence_priority_cap",
+    ]))
+    return TriageResult.model_validate(data)
 
 
 def apply_triage_policy(
@@ -103,4 +164,4 @@ def apply_triage_policy(
         )
     for adjustment in data["policy_adjustments"]:
         logger.info("policy_adjustment=%s", adjustment)
-    return TriageResult.model_validate(data)
+    return cap_unverified_bid_priority(TriageResult.model_validate(data), analysis)
