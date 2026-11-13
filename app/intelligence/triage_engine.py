@@ -16,7 +16,6 @@ from app.intelligence.eligibility import individual_only_conflict, applicant_eli
 from app.intelligence.triage_policy import (
     apply_triage_policy,
     cap_unverified_bid_priority,
-    pending_mandatory_checks,
 )
 from app.intelligence.matching_engine import (
     CompanyMatchOutcome,
@@ -108,8 +107,6 @@ def validate_triage(
     }
     if high and weak:
         raise ValueError("Weak matches cannot have high priority")
-    if high and pending_mandatory_checks(analysis, result):
-        raise ValueError("Unverified mandatory evidence cannot have high bid priority")
     if result.bid_readiness is BidReadiness.READY and (
         result.critical_gaps
         or result.eligibility_risks
