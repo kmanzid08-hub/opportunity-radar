@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import Mock
 
 import pytest
@@ -187,7 +187,8 @@ def test_awf_eu_ambiguous_extraction_qualifies_and_triages_without_retry(
     quotes = ["Notification of Selected individual", "CV(s) of proposed consultant(s)"]
     backend = Mock()
     backend.generate_structured.return_value = _analysis(
-        bidder_eligibility=restriction(quotes)
+        bidder_eligibility=restriction(quotes),
+        deadline=date.today() + timedelta(days=7),
     )
     a = analyze_opportunity(
         source_url="https://example.test/eu",
