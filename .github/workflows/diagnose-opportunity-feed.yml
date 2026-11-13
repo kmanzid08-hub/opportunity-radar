@@ -55,3 +55,5 @@ jobs:
               for label, sql in checks.items():
                   print(f"CHECK {label}: {conn.execute(text(sql)).scalar_one()}", flush=True)
           PY
+      - name: Smoke-test backfill worker
+        run: python -m app.backfill_matches
