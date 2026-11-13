@@ -5,6 +5,13 @@ on:
     - cron: "0 4 * * *"
       timezone: "Africa/Kigali"
   workflow_dispatch:
+  # Permit a deliberately tagged workflow-file commit to launch verification.
+  # Ordinary code pushes do not start extra production scans.
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/daily-tender-scan.yml
 
 concurrency:
   group: opportunity-radar-data-pipeline
@@ -12,6 +19,7 @@ concurrency:
 
 jobs:
   scan:
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[run-scan]')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
