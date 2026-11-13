@@ -1,0 +1,79 @@
+name: Verify OpenAI backup configuration (one-time)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/verify-openai-live.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify-backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_FALLBACK_ENABLED: ${{ vars.OPENAI_FALLBACK_ENABLED || 'false' }}
+      OPENAI_FALLBACK_MODEL: ${{ vars.OPENAI_FALLBACK_MODEL || 'gpt-5-mini' }}
+      ENABLE_INTERNAL_SCHEDULER: 'false'
+    steps:
+      - name: Check out Opportunity Radar application
+        uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install SDKs
+        run: pip install -r requirements.txt
+      - name: Verify opt-in and one synthetic Gemini-to-OpenAI handoff
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from pydantic import BaseModel
+
+          from app.intelligence.openai_fallback import fallback_enabled
+          from app.intelligence.gemini_client import (
+              GeminiAPIError,
+              GeminiClient,
+              GeminiConfig,
+          )
+          from app.intelligence.gemini_diagnostics import GeminiDiagnostic
+
+          if not os.environ.get("OPENAI_API_KEY", "").strip():
+              raise SystemExit("CONFIGURATION_FAILED: GitHub Actions secret OPENAI_API_KEY is missing")
+          if not fallback_enabled():
+              raise SystemExit("CONFIGURATION_FAILED: Set GitHub Actions variable OPENAI_FALLBACK_ENABLED=true")
+
+          class BackupProbe(BaseModel):
+              probe: str
+
+          client = GeminiClient(GeminiConfig(api_key="synthetic-never-used"), max_attempts=1)
+
+          def synthetic_quota_failure(*args, **kwargs):
+              raise GeminiAPIError(
+                  "Simulated Gemini quota exhaustion",
+                  diagnostic=GeminiDiagnostic("QUOTA_EXCEEDED", 429, False),
+              )
+
+          client._generate = synthetic_quota_failure
+
+          try:
+              result = client.generate_structured(
+                  'Test provider connectivity only. Return probe="ok". No real business data.',
+                  BackupProbe,
+                  system_instruction='Return a valid structured response with probe exactly "ok".',
+              )
+          except Exception as exc:
+              code = getattr(exc, "status_code", None)
+              print(f"BACKUP_FAILED: {type(exc).__name__} status={code or 'unavailable'}")
+              raise SystemExit(1) from None
+
+          if result.probe != "ok":
+              raise SystemExit("BACKUP_FAILED: Unexpected synthetic verification result")
+          print("OPENAI_BACKUP_VERIFIED: Confirmed successful Gemini-quota fallback to OpenAI API")
+          PY
