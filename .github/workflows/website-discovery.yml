@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: opportunity-radar-website-discovery
+  group: opportunity-radar-data-pipeline
   cancel-in-progress: false
 
 jobs:
@@ -19,11 +19,15 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       ENABLE_INTERNAL_SCHEDULER: "false"
 
     steps:
-      - name: Check out repository
+      - name: Check out AI-enabled application
         uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -34,5 +38,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Discover new websites when due
+      - name: Verify source-discovery credentials
+        shell: bash
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$BRAVE_API_KEY" ] || [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::DATABASE_URL, BRAVE_API_KEY and GEMINI_API_KEY are required in Actions secrets."
+            exit 1
+          fi
+
+      - name: Discover and AI-evaluate websites when due
         run: python -m app.scheduled_discovery
