@@ -74,6 +74,12 @@ def stored_triage_result(
         )
         if record.triage_fingerprint != expected:
             return None
-        return TriageResult.model_validate(record.result_data)
+        from app.intelligence.triage_policy import cap_unverified_bid_priority
+
+        # Older cached HIGH ratings remain visible but are shown conservatively
+        # until the separate mandatory eligibility evidence is verified.
+        return cap_unverified_bid_priority(
+            TriageResult.model_validate(record.result_data), analysis
+        )
     except ValueError:
         return None
