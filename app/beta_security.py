@@ -197,12 +197,16 @@ class BetaSecurityMiddleware(BaseHTTPMiddleware):
                 "The service is temporarily unavailable. Please retry later.", 503
             )
         request.state.user = user
-        session_token = request.cookies.get(SESSION_COOKIE, "")
-        csrf = (
-            digest("csrf:" + session_token)
-            if session_token
-            else request.cookies.get(CSRF_COOKIE) or secrets.token_urlsafe(32)
+        # Keep the double-submit CSRF token stable independently of the
+        # authentication session. A session rotation (login, logout or
+        # password change) must not invalidate a different tab's form.
+        csrf_cookie = request.cookies.get(CSRF_COOKIE, "")
+        valid_csrf_cookie = (
+            32 <= len(csrf_cookie) <= 128
+            and csrf_cookie.isascii()
+            and all(char.isalnum() or char in "-_" for char in csrf_cookie)
         )
+        csrf = csrf_cookie if valid_csrf_cookie else secrets.token_urlsafe(32)
         request.state.csrf = csrf
         scope_token = principal.set(user)
         budget_token = ai_attempts.set(0)
@@ -231,7 +235,7 @@ class BetaSecurityMiddleware(BaseHTTPMiddleware):
                 expected_origin = os.environ.get("PUBLIC_ORIGIN") or str(
                     request.base_url
                 ).rstrip("/")
-                token_matches = hmac.compare_digest(csrf, supplied)
+                token_matches = supplied.isascii() and hmac.compare_digest(csrf, supplied)
                 allowed_origins = {
                     expected_origin.rstrip("/"),
                     "https://opportunity-radar-gx12.onrender.com",
@@ -317,14 +321,21 @@ class BetaSecurityMiddleware(BaseHTTPMiddleware):
             )
             if secure_cookies():
                 response.headers["Strict-Transport-Security"] = "max-age=31536000"
-            response.set_cookie(
-                CSRF_COOKIE,
-                csrf,
-                httponly=True,
-                secure=secure_cookies(),
-                samesite="strict",
-                path="/",
-            )
+            # Only issue a new cookie when absent/invalid. Static assets and
+            # health probes must never race a rendered form by overwriting it.
+            if (
+                not valid_csrf_cookie
+                and path not in {"/healthz", "/readyz"}
+                and not path.startswith("/static/")
+            ):
+                response.set_cookie(
+                    CSRF_COOKIE,
+                    csrf,
+                    httponly=True,
+                    secure=secure_cookies(),
+                    samesite="strict",
+                    path="/",
+                )
             return response
         finally:
             principal.reset(scope_token)
