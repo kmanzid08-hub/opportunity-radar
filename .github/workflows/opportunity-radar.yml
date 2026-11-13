@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: opportunity-radar-rwanda-automation
+  group: opportunity-radar-data-pipeline
   cancel-in-progress: false
 
 jobs:
