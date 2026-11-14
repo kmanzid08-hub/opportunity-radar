@@ -66,6 +66,10 @@ def test_categories_are_complete_and_country_parameterized(
         "Development partners",
         "International organisations",
         "Private sector procurement",
+        "Audit and financial advisory buyers",
+        "Research and impact evaluation buyers",
+        "Financial inclusion and policy research",
+        "Rwandan corporate and nonprofit websites",
     }
 
     queries = tuple(
