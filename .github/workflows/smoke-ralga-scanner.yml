@@ -1,0 +1,51 @@
+name: Smoke test live RALGA scanner (read-only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/smoke-ralga-scanner.yml
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      ENABLE_INTERNAL_SCHEDULER: 'false'
+      ENABLE_PDF_OCR: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install application dependencies
+        run: pip install -r requirements.txt
+      - name: Crawl verified RALGA publisher without changing database
+        shell: bash
+        run: |
+          python - <<'PY'
+          from sqlalchemy import select
+          from app.database import SessionLocal
+          from app.models import Source
+          from app.scanners.company_websites import CompanyWebsiteScanner
+          with SessionLocal() as db:
+              item = db.scalar(
+                  select(Source).where(Source.domain == "ralga.rw", Source.is_active.is_(True), Source.is_approved.is_(True))
+              )
+              if item is None:
+                  raise SystemExit("RALGA_NOT_ACTIVE")
+              db.expunge(item)
+          print("SOURCE",item.domain,item.monitor_url,"discovered_from",item.discovered_from,flush=True)
+          scanner = CompanyWebsiteScanner()
+          scanner.MAX_PAGES_PER_SOURCE=24
+          results = scanner._scan_source(item)
+          documents=[x for x in results if x.source_url.lower().endswith(".pdf")]
+          print("RALGA_CRAWL_RESULTS",len(results),"PDF_NOTICES",len(documents),flush=True)
+          for entry in results[:20]:
+              print("NOTICE",str(entry.title)[:150],"DEADLINE",entry.deadline,"URL",entry.source_url,"DESC_LENGTH",len(entry.description or ""),flush=True)
+          print("RALGA_SMOKE_COMPLETED",flush=True)
+          PY
