@@ -139,86 +139,44 @@ def _deduplicate_countries(
 
 
 def _discovery_countries() -> list[str]:
+    """Search the union of markets requested by ALL active business profiles.
+
+    A first-company-only lookup silently excluded markets of other active
+    companies. Prefer each company's configured target countries, falling back
+    to its registered country. Rwanda remains the fallback for an empty workspace.
+    Keep the search bounded to avoid unapproved API spending across many markets.
     """
-    Determine which markets Website Discovery
-    should search.
-
-    Priority:
-
-    1. Business Profile target countries.
-    2. Organization home country.
-    3. Rwanda as the temporary development fallback.
-
-    Once authentication is introduced, the scheduler
-    can iterate over all active organizations instead
-    of using the first active workspace.
-    """
-
     with SessionLocal() as db:
-        organization = db.scalar(
-            select(
-                Organization
+        rows = db.execute(
+            select(Organization, OpportunityPreference)
+            .outerjoin(
+                OpportunityPreference,
+                OpportunityPreference.organization_id == Organization.id,
             )
-            .where(
-                Organization
-                .is_active
-                .is_(True)
-            )
-            .order_by(
-                Organization
-                .created_at
-                .asc()
-            )
-            .limit(
-                1
-            )
+            .where(Organization.is_active.is_(True))
+            .order_by(Organization.created_at.asc(), Organization.id.asc())
+        ).all()
+
+    requested: list[object] = []
+    for organization, preference in rows:
+        preferred = list(preference.countries or []) if preference else []
+        if preferred:
+            requested.extend(preferred)
+        elif organization.country:
+            requested.append(organization.country)
+
+    countries = _deduplicate_countries(requested)
+    if not countries:
+        return [DEFAULT_DISCOVERY_COUNTRY]
+
+    # A single discovery invocation should not fan out without bounds.
+    maximum = 8
+    if len(countries) > maximum:
+        print(
+            "Discovery market limit reached; using first "
+            f"{maximum} of {len(countries)} configured countries."
         )
-
-        if organization is None:
-            return [
-                DEFAULT_DISCOVERY_COUNTRY
-            ]
-
-        preference = db.scalar(
-            select(
-                OpportunityPreference
-            )
-            .where(
-                OpportunityPreference
-                .organization_id
-                == organization.id
-            )
-        )
-
-        if (
-            preference is not None
-            and preference.countries
-        ):
-            countries = (
-                _deduplicate_countries(
-                    list(
-                        preference.countries
-                    )
-                )
-            )
-
-            if countries:
-                return countries
-
-        home_country = (
-            _clean_country(
-                organization.country
-            )
-        )
-
-        if home_country:
-            return [
-                home_country
-            ]
-
-    return [
-        DEFAULT_DISCOVERY_COUNTRY
-    ]
+    return countries[:maximum]
 
 
 def _last_success() -> datetime | None:
