@@ -1,4 +1,4 @@
-name: Verify incremental Opportunity Radar matches
+name: Verify incremental publisher opportunity matching
 on:
   push:
     branches: [main]
