@@ -388,3 +388,54 @@ def test_gemini_failure_is_persisted_without_caching(
         assert source.source_fingerprint is None
         assert source.is_active is False
         assert source.is_approved is False
+
+
+def test_multiple_monitor_paths_on_same_domain_are_preserved_and_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_session_factory,
+) -> None:
+    """Procurement and careers pages must not replace each other."""
+    analyzer = RecordingAnalyzer([_analysis("ACCEPT") for _ in range(4)])
+    fetcher = ContentSequence(
+        *[f"Legitimate Rwanda opportunity page number {i}" for i in range(4)]
+    )
+    discovery = _discovery(
+        monkeypatch,
+        isolated_session_factory,
+        analyzer=analyzer,
+        content_fetcher=fetcher,
+    )
+
+    paths = ["/procurement", "/consultancies", "/careers", "/tenders"]
+    for path in paths:
+        outcome = discovery._save_candidate(
+            _candidate(monitor_url="https://procurement.example.test" + path)
+        )
+        assert outcome.status == "ACCEPT"
+        assert outcome.created
+
+    # A fifth same-domain URL must not cause unbounded API/crawl growth.
+    overflow = discovery._save_candidate(
+        _candidate(monitor_url="https://procurement.example.test/jobs")
+    )
+    assert overflow.status == "DOMAIN_CAP"
+    assert overflow.analyzed is False
+    assert len(fetcher.calls) == 4
+    assert len(analyzer.calls) == 4
+
+    with isolated_session_factory() as db:
+        stored = db.scalars(select(Source).order_by(Source.monitor_url)).all()
+        assert len(stored) == 4
+        assert len({source.domain for source in stored}) == 1
+        assert all(source.is_approved for source in stored)
+        assert {source.monitor_url for source in stored} == {
+            "https://procurement.example.test" + path for path in paths
+        }
+
+    # Repeated discovery of an existing path still uses its cached source.
+    cached = discovery._save_candidate(
+        _candidate(monitor_url="https://procurement.example.test/procurement")
+    )
+    assert cached.status == "ACCEPT"
+    assert not cached.created
+    assert not cached.analyzed
