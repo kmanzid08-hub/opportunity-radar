@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 import re
 import time
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from urllib import robotparser
 from urllib.parse import urljoin, urlparse, urlunparse
 
@@ -607,33 +609,34 @@ class CompanyWebsiteScanner(BaseScanner):
         source: Source,
         now: datetime,
     ) -> bool:
-
         if source.last_scanned_at is None:
             return True
 
-        last_scanned_at = (
-            source.last_scanned_at
-        )
-
+        last_scanned_at = source.last_scanned_at
         if last_scanned_at.tzinfo is None:
-            last_scanned_at = (
-                last_scanned_at.replace(
-                    tzinfo=timezone.utc
-                )
+            last_scanned_at = last_scanned_at.replace(tzinfo=timezone.utc)
+
+        # A daily GitHub cron may run earlier than yesterday's completion
+        # time; exact 24-hour windows caused healthy sites to be skipped.
+        # In scheduled daily mode, scan each healthy website once per Kigali
+        # calendar day, regardless of its old priority-based hour interval.
+        daily_mode = os.getenv("DAILY_SOURCE_SCAN", "").strip().lower() in {
+            "true", "1", "yes", "on"
+        }
+        if daily_mode and int(source.consecutive_failures or 0) < 4:
+            kigali = ZoneInfo("Africa/Kigali")
+            return (
+                last_scanned_at.astimezone(kigali).date()
+                < now.astimezone(kigali).date()
             )
 
+        # Retain adaptive backoff for repeatedly failing websites and for
+        # non-scheduled manual scanner usage.
         interval_hours = int(
-            source.scan_interval_hours
-            or self.DEFAULT_SCAN_INTERVAL_HOURS
+            source.scan_interval_hours or self.DEFAULT_SCAN_INTERVAL_HOURS
         )
+        return now >= last_scanned_at + timedelta(hours=interval_hours)
 
-        return (
-            now
-            >= last_scanned_at
-            + timedelta(
-                hours=interval_hours
-            )
-        )
 
     def _scan_source(
         self,
