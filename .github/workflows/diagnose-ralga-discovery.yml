@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install pure diagnostic dependencies
-        run: pip install requests beautifulsoup4 sqlalchemy pydantic google-genai python-dotenv
+        run: pip install -r requirements.txt
       - name: Run RALGA discoverability diagnostic (no database writes, no AI)
         shell: bash
         run: |
