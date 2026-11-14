@@ -31,6 +31,7 @@ jobs:
       OPENAI_FALLBACK_MODEL: ${{ vars.OPENAI_FALLBACK_MODEL || 'gpt-5-mini' }}
       AUTOMATION_MODE: "scan"
       ENABLE_INTERNAL_SCHEDULER: "false"
+      DAILY_SOURCE_SCAN: 'true'
 
     steps:
       - name: Check out AI-enabled application
