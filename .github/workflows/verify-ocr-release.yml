@@ -47,7 +47,10 @@ jobs:
           print("REAL_SCANNED_TENDER_CHARS",len(text))
           print("OCR_TAIL",text[-1400:])
           print("DATE_TERMS",[(term,text.lower().find(term)) for term in ("deadline","12 november","november","submission","before","close")])
-          print("EXTRACTED_DEADLINE",CompanyWebsiteScanner()._extract_deadline(text))
+          from datetime import date
+          extracted_deadline=CompanyWebsiteScanner()._extract_deadline(text)
+          print("EXTRACTED_DEADLINE",extracted_deadline)
+          assert extracted_deadline == date(2026, 11, 12), "OCR notice deadline should be recognized"
           assert len(text)>80, "The real scanned tender must produce usable OCR text"
           assert "audit" in text.lower(), "OCR should recognize the document's audit scope"
           PY
