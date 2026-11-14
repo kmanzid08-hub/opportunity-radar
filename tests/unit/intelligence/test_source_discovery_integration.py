@@ -397,7 +397,8 @@ def test_multiple_monitor_paths_on_same_domain_are_preserved_and_bounded(
     """Procurement and careers pages must not replace each other."""
     analyzer = RecordingAnalyzer([_analysis("ACCEPT") for _ in range(4)])
     fetcher = ContentSequence(
-        *[f"Legitimate Rwanda opportunity page number {i}" for i in range(4)]
+        *[f"Legitimate Rwanda opportunity page number {i}" for i in range(4)],
+        "Legitimate Rwanda opportunity page number 0",
     )
     discovery = _discovery(
         monkeypatch,
