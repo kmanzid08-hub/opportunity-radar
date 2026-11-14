@@ -1,4 +1,4 @@
-name: Verify expanded website discovery and daily scans
+name: Verify Rwanda source discovery and daily crawling
 on:
   push:
     branches: [main]
