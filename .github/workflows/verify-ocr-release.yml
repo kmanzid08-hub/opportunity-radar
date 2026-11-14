@@ -1,4 +1,4 @@
-name: Verify bounded OCR and real audit tender
+name: Verify audit OCR, deadline, and first-time source scheduling
 on:
   push:
     branches: [main]
