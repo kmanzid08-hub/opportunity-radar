@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
@@ -577,24 +578,20 @@ def main() -> int:
         _last_success()
     )
 
+    # Run once per local calendar day, rather than waiting for 24 exact
+    # hours. Daily GitHub Actions can start at slightly different times.
+    kigali = ZoneInfo("Africa/Kigali")
     if (
         not force_discovery
         and last_success is not None
-        and now
-        < last_success
-        + INTERVAL
+        and now.astimezone(kigali).date()
+        <= last_success.astimezone(kigali).date()
     ):
-        next_run = (
-            last_success
-            + INTERVAL
-        )
-
         print(
-            "Website discovery is not due. "
-            f"Next due: "
-            f"{next_run.isoformat()}"
+            "Website discovery already completed on "
+            f"{last_success.astimezone(kigali).date().isoformat()} "
+            "(Africa/Kigali)."
         )
-
         return 0
 
     if force_discovery:
@@ -646,7 +643,7 @@ def main() -> int:
 
     if (
         queries_executed == 0
-        and failed_queries > 0
+        or failed_queries >= queries_executed
     ):
         raise RuntimeError(
             "Website discovery failed: "
