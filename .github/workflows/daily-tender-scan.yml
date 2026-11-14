@@ -6,7 +6,7 @@ on:
     - cron: "0 8 * * *"
       timezone: "Africa/Kigali"
   workflow_dispatch:
-  # Permit a tagged workflow-file commit to scan saved sources and match both active companies.
+  # Tagged releases scan newly discovered sources using cached OCR and match both active companies.
   # Ordinary code pushes do not start extra production scans.
   push:
     branches:
