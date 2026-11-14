@@ -28,7 +28,7 @@ from app.source_quality import SourceQualityEvaluator
 from app.source_fetch_diagnostics import SourceFetchError, report_fetch_failure
 
 import requests
-from sqlalchemy import or_, select
+from sqlalchemy import func, select
 
 from app.database import SessionLocal
 from app.models import Source
@@ -110,6 +110,7 @@ class SourceDiscovery:
     MAX_FETCHED_CONTENT_CHARS = 100_000
 
     RESULTS_PER_QUERY = 20
+    MAX_MONITOR_URLS_PER_DOMAIN = 4
     DISCOVERY_CATEGORIES = DISCOVERY_CATEGORIES
 
     OPPORTUNITY_TERMS = (
@@ -264,7 +265,7 @@ class SourceDiscovery:
         queries_executed = 0
         query_runtime_total = 0.0
         seen_urls: set[str] = set()
-        seen_domains: set[str] = set()
+        domain_slots: dict[str, int] = {}
 
         category_queries = tuple(
             (
@@ -349,17 +350,20 @@ class SourceDiscovery:
 
                         candidate_url = str(candidate["monitor_url"])
                         candidate_domain = str(candidate["domain"])
-                        if (
-                            candidate_url in seen_urls
-                            or candidate_domain in seen_domains
-                        ):
+                        if candidate_url in seen_urls:
                             existing_sources += 1
                             query_duplicates += 1
                             category_stats.duplicates += 1
                             continue
 
+                        # Monitor distinct procurement, consultancy and career
+                        # paths on the same site, without unlimited requests.
+                        if domain_slots.get(candidate_domain, 0) >= self.MAX_MONITOR_URLS_PER_DOMAIN:
+                            query_duplicates += 1
+                            category_stats.duplicates += 1
+                            continue
                         seen_urls.add(candidate_url)
-                        seen_domains.add(candidate_domain)
+                        domain_slots[candidate_domain] = domain_slots.get(candidate_domain, 0) + 1
 
                         candidate_results += 1
                         outcome = self._save_candidate(candidate)
@@ -396,14 +400,14 @@ class SourceDiscovery:
                                 "  [AI REVIEW] "
                                 f"{candidate['organisation_name']}"
                             )
-                        elif outcome.status == AnalysisDecision.REJECT.value:
+                        elif outcome.status in {AnalysisDecision.REJECT.value, "DOMAIN_CAP"}:
                             rejected_results += 1
                             query_rejected += 1
                             category_stats.rejected += 1
                         else:
                             ai_failures += 1
 
-                        if not outcome.created:
+                        if not outcome.created and outcome.status != "DOMAIN_CAP":
                             existing_sources += 1
                             query_duplicates += 1
                             category_stats.duplicates += 1
@@ -675,6 +679,22 @@ class SourceDiscovery:
             "domain": domain,
         }
 
+        # Unique source identity is monitor_url, not domain. Avoid unbounded
+        # monitoring growth or AI analysis on excess same-domain pages.
+        with SessionLocal() as db:
+            current = db.scalar(
+                select(Source).where(Source.monitor_url == monitor_url)
+            )
+            count_on_domain = db.scalar(
+                select(func.count(Source.id)).where(Source.domain == domain)
+            ) or 0
+            if current is None and count_on_domain >= self.MAX_MONITOR_URLS_PER_DOMAIN:
+                return SourceProcessingOutcome(
+                    status="DOMAIN_CAP",
+                    created=False,
+                    analyzed=False,
+                )
+
         try:
             meaningful_content = self.content_fetcher(monitor_url)
             if not meaningful_content.strip():
@@ -696,12 +716,7 @@ class SourceDiscovery:
 
         with SessionLocal() as db:
             existing = db.scalar(
-                select(Source).where(
-                    or_(
-                        Source.monitor_url == monitor_url,
-                        Source.domain == domain,
-                    )
-                )
+                select(Source).where(Source.monitor_url == monitor_url)
             )
 
             if (
@@ -774,14 +789,7 @@ class SourceDiscovery:
 
         with SessionLocal() as db:
             existing = db.scalar(
-                select(Source).where(
-                    or_(
-                        Source.monitor_url
-                        == monitor_url,
-                        Source.domain
-                        == domain,
-                    )
-                )
+                select(Source).where(Source.monitor_url == monitor_url)
             )
 
             if existing is not None:
@@ -855,12 +863,7 @@ class SourceDiscovery:
 
         with SessionLocal() as db:
             source = db.scalar(
-                select(Source).where(
-                    or_(
-                        Source.monitor_url == monitor_url,
-                        Source.domain == domain,
-                    )
-                )
+                select(Source).where(Source.monitor_url == monitor_url)
             )
             created = source is None
             if source is None:
