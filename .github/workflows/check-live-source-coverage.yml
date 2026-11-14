@@ -1,0 +1,51 @@
+name: Check live source coverage (read-only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/check-live-source-coverage.yml
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install database read-only driver
+        run: pip install 'psycopg[binary]>=3.2,<4'
+      - name: Check RALGA and source counts without modifications
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+          from psycopg.rows import dict_row
+          from datetime import timezone, datetime
+          url=os.environ["DATABASE_URL"].replace("postgresql+psycopg://","postgresql://",1)
+          with psycopg.connect(url, connect_timeout=20, row_factory=dict_row) as conn:
+              with conn.cursor() as c:
+                  c.execute("BEGIN TRANSACTION READ ONLY")
+                  c.execute("""SELECT COUNT(*) AS total,
+                     COUNT(*) FILTER (WHERE is_active AND is_approved AND NOT is_auto_disabled) AS active,
+                     COUNT(*) FILTER (WHERE first_discovered_at >= NOW()-INTERVAL '2 hours') AS recent,
+                     COUNT(DISTINCT domain) AS domains
+                     FROM sources""")
+                  print("COVERAGE",dict(c.fetchone()),flush=True)
+                  c.execute("""SELECT id,domain,monitor_url,ai_status,is_active,is_approved,
+                     first_discovered_at FROM sources
+                     WHERE lower(domain) LIKE '%ralga%' OR lower(coalesce(organisation_name,'')) LIKE '%ralga%'
+                     ORDER BY id""")
+                  print("RALGA_ROWS",c.fetchall(),flush=True)
+                  c.execute("""SELECT COUNT(*) AS opportunity_count FROM opportunities""")
+                  print("OPPORTUNITIES",dict(c.fetchone()),flush=True)
+          print("VERIFIED_AT_UTC",datetime.now(timezone.utc).isoformat(),flush=True)
+          PY
