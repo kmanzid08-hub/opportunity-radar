@@ -211,3 +211,73 @@ def test_discovery_diagnostics_records_reason_without_secrets(monkeypatch, tmp_p
     assert RALGA_PDF in content
     assert "Publisher document verified" in content
     assert "example-not-live" not in content
+
+
+def test_announcement_page_exposes_audit_pdf_to_scanner():
+    html = f"""
+    <html><body><main>
+      <h1>Announcements</h1>
+      <a href="{RALGA_PDF}">Download: Audit Services Tender Notice</a>
+      <a href="/about-ralga/overview">About association</a>
+    </main></body></html>
+    """
+    scanner = CompanyWebsiteScanner()
+    urls = scanner._extract_relevant_links(
+        soup=BeautifulSoup(html, "html.parser"),
+        page_url=RALGA_ANNOUNCEMENTS,
+        base_domain="ralga.rw",
+    )
+    assert RALGA_PDF in urls
+
+
+def test_retry_previous_ai_failure_preserves_site_and_activates_on_success(
+    monkeypatch, isolated_session_factory
+):
+    monkeypatch.setattr(source_discovery, "SessionLocal", isolated_session_factory)
+    with isolated_session_factory() as db:
+        db.add(Source(
+            organisation_name="Local Authorities Association",
+            base_url=RALGA_SITE, monitor_url=RALGA_SITE,
+            domain="ralga.rw", source_type="NGO",
+            discovered_from=RALGA_PDF,
+            ai_status="ERROR", ai_reason="Gemini source analysis failed.",
+            is_active=False, is_approved=False, confidence_score=50,
+            priority_score=45, url_relevance_score=0,
+        ))
+        db.commit()
+    calls = []
+    def classify(**kwargs):
+        calls.append(kwargs)
+        return SourceAnalysis(
+            decision="ACCEPT", confidence=94,
+            reason="Same-domain publisher tenders are verified."
+        )
+    discovery = _discovery(monkeypatch, analyzer=classify)
+    assert discovery._retry_failed_source_analyses(limit=4) == 1
+    assert len(calls) == 1
+    with isolated_session_factory() as db:
+        saved = db.scalar(select(Source).where(Source.domain == "ralga.rw"))
+        assert saved.ai_status == "ACCEPT"
+        assert saved.is_active is True
+        assert saved.is_approved is True
+        assert saved.discovered_from == RALGA_PDF
+
+
+def test_permanently_blocked_site_not_retried_as_ai_failure(
+    monkeypatch, isolated_session_factory
+):
+    monkeypatch.setattr(source_discovery, "SessionLocal", isolated_session_factory)
+    with isolated_session_factory() as db:
+        db.add(Source(
+            organisation_name="Blocked Portal",
+            base_url="https://blocked.example.rw",
+            monitor_url="https://blocked.example.rw",
+            domain="blocked.example.rw", source_type="Unknown",
+            ai_status="ERROR", ai_reason="Source content could not be fetched. BLOCKED",
+            is_active=False, is_approved=False,
+        ))
+        db.commit()
+    def classify(**kwargs):
+        raise AssertionError("Blocked pages should not consume AI retries")
+    discovery = _discovery(monkeypatch, analyzer=classify)
+    assert discovery._retry_failed_source_analyses(limit=4) == 0
