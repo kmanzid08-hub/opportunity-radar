@@ -186,7 +186,7 @@ def test_invalid_force_value_fails_before_database_access(
     last_success.assert_not_called()
 
 
-def test_workflow_force_flag_depends_on_dispatch_event() -> None:
+def test_workflow_discovers_daily_and_can_be_forced_explicitly() -> None:
     workflow = (
         PROJECT_ROOT
         / ".github"
@@ -194,9 +194,76 @@ def test_workflow_force_flag_depends_on_dispatch_event() -> None:
         / "website-discovery.yml"
     ).read_text(encoding="utf-8")
 
-    assert 'cron: "20 4 */5 * *"' in workflow
+    assert 'cron: "20 4 * * *"' in workflow
     assert "workflow_dispatch:" in workflow
-    assert (
-        "FORCE_WEBSITE_DISCOVERY: "
-        "${{ github.event_name == 'workflow_dispatch' }}"
-    ) in workflow
+    assert "FORCE_WEBSITE_DISCOVERY:" in workflow
+    assert "github.event_name == 'workflow_dispatch'" in workflow
+    assert "[run-discovery]" in workflow
+
+
+def test_countries_include_markets_from_both_active_companies(
+    monkeypatch: pytest.MonkeyPatch, isolated_session_factory
+) -> None:
+    from app.models import Organization, OpportunityPreference
+
+    monkeypatch.setattr(scheduled_discovery, "SessionLocal", isolated_session_factory)
+    with isolated_session_factory() as db:
+        audit = Organization(name="UT CPA LTD", country="Rwanda", is_active=True)
+        consulting = Organization(name="UT CONSULTING LTD", country="Rwanda", is_active=True)
+        dormant = Organization(name="Dormant Company", country="Kenya", is_active=False)
+        db.add_all([audit, consulting, dormant])
+        db.flush()
+        db.add_all([
+            OpportunityPreference(organization_id=audit.id, countries=["Rwanda", "Uganda"]),
+            OpportunityPreference(organization_id=consulting.id, countries=["Rwanda", "Tanzania"]),
+        ])
+        db.commit()
+    assert scheduled_discovery._discovery_countries() == [
+        "Rwanda", "Uganda", "Tanzania"
+    ]
+
+
+def test_previous_kigali_day_runs_even_if_less_than_24_hours_ago(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 06:00 Kigali after a 07:00 Kigali scan on the PREVIOUS day.
+    now = datetime(2026, 11, 14, 4, tzinfo=timezone.utc)
+    previously = datetime(2026, 11, 13, 5, tzinfo=timezone.utc)
+    monkeypatch.delenv(scheduled_discovery.FORCE_SETTING, raising=False)
+    run_discovery, _ = _prepare_job(
+        monkeypatch, now=now, last_success=previously
+    )
+    assert scheduled_discovery.main() == 0
+    run_discovery.assert_called_once_with(country="Rwanda")
+
+
+def test_same_kigali_day_does_not_run_twice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime(2026, 11, 14, 4, tzinfo=timezone.utc)
+    previously = datetime(2026, 11, 14, 1, tzinfo=timezone.utc)
+    monkeypatch.delenv(scheduled_discovery.FORCE_SETTING, raising=False)
+    run_discovery, _ = _prepare_job(
+        monkeypatch, now=now, last_success=previously
+    )
+    assert scheduled_discovery.main() == 0
+    run_discovery.assert_not_called()
+
+
+def test_all_failed_brave_queries_do_not_advance_success_clock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(scheduled_discovery.FORCE_SETTING, "true")
+    run_discovery, record_success = _prepare_job(
+        monkeypatch,
+        now=datetime(2026, 11, 14, 4, tzinfo=timezone.utc),
+        last_success=None,
+    )
+    run_discovery.return_value = {
+        "queries_executed": 4,
+        "failed_queries": 4,
+        "added_sources": 0,
+    }
+    with pytest.raises(RuntimeError, match="no search query completed"):
+        scheduled_discovery.main()
+    record_success.assert_not_called()
