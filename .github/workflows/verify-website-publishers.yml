@@ -1,0 +1,43 @@
+name: Verify publisher-first discovery and PDF notices
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/verify-website-publishers.yml]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install requirements
+        run: pip install -r requirements.txt
+      - name: Compile application
+        run: python -m compileall -q app
+      - name: Verify publisher discovery PDF extraction and source persistence
+        run: |
+          python -m pytest -q \
+            tests/unit/test_publisher_discovery_and_pdf.py \
+            tests/unit/intelligence/test_source_discovery_integration.py \
+            tests/unit/test_source_discovery_metrics.py \
+            tests/unit/test_company_website_scanner.py \
+            tests/unit/test_scheduled_discovery.py \
+            tests/unit/test_daily_source_scan.py
+      - name: Compile website templates
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from jinja2 import Environment, FileSystemLoader
+          base = Path("app/templates")
+          env = Environment(loader=FileSystemLoader(str(base)))
+          for p in base.rglob("*.html"):
+              env.get_template(p.relative_to(base).as_posix())
+          print("ALL_TEMPLATES_VALID")
+          PY
