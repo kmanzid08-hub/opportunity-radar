@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import time
 from collections.abc import Callable
 from hashlib import sha256
+from pathlib import Path
 from dotenv import load_dotenv
 from dataclasses import dataclass
 from typing import Any, Iterable, cast
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urljoin, urlparse, urlunparse
 from datetime import datetime, timezone
 
 from bs4 import BeautifulSoup
@@ -58,6 +60,7 @@ class SourceProcessingOutcome:
     created: bool
     analyzed: bool
     confidence: int | None = None
+    reason: str | None = None
 
 
 SourceAnalyzer = Callable[..., SourceAnalysis]
@@ -247,6 +250,29 @@ class SourceDiscovery:
         )
         self.content_fetcher = content_fetcher or self._fetch_source_content
 
+    def _log_diagnostic(self, **fields: object) -> None:
+        """Record every candidate decision for post-run root-cause analysis.
+
+        Disabled unless explicitly configured by the GitHub discovery workflow.
+        These records contain public search URLs, not private API credentials.
+        Diagnostics failures must not stop a discovery job.
+        """
+        path = os.getenv("DISCOVERY_DIAGNOSTICS_PATH", "").strip()
+        if not path:
+            return
+        record = {
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "country": self.country,
+            **fields,
+        }
+        try:
+            output = Path(path)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            with output.open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+        except OSError as exc:
+            print(f"Discovery diagnostic export unavailable: {type(exc).__name__}")
+
     def run(self) -> dict[str, int | float]:
         """
         Run all configured discovery queries.
@@ -336,6 +362,13 @@ class SourceDiscovery:
                     category_stats.results += query_result_count
 
                     for result in results:
+                        self._log_diagnostic(
+                            event="search_result",
+                            category=category.name,
+                            query=query,
+                            result_url=result.url[:2000],
+                            result_title=result.title[:250],
+                        )
                         candidate = self._build_candidate(
                             result=result,
                             query=query,
@@ -343,6 +376,13 @@ class SourceDiscovery:
                         )
 
                         if candidate is None:
+                            self._log_diagnostic(
+                                event="candidate_filtered",
+                                reason="unsupported_or_invalid_url",
+                                category=category.name,
+                                query=query,
+                                result_url=result.url[:2000],
+                            )
                             rejected_results += 1
                             query_rejected += 1
                             category_stats.rejected += 1
@@ -351,6 +391,13 @@ class SourceDiscovery:
                         candidate_url = str(candidate["monitor_url"])
                         candidate_domain = str(candidate["domain"])
                         if candidate_url in seen_urls:
+                            self._log_diagnostic(
+                                event="duplicate_within_run",
+                                reason="same_monitor_url",
+                                query=query,
+                                result_url=result.url[:2000],
+                                monitor_url=candidate_url,
+                            )
                             existing_sources += 1
                             query_duplicates += 1
                             category_stats.duplicates += 1
@@ -359,6 +406,13 @@ class SourceDiscovery:
                         # Monitor distinct procurement, consultancy and career
                         # paths on the same site, without unlimited requests.
                         if domain_slots.get(candidate_domain, 0) >= self.MAX_MONITOR_URLS_PER_DOMAIN:
+                            self._log_diagnostic(
+                                event="duplicate_within_run",
+                                reason="domain_candidate_limit",
+                                query=query,
+                                result_url=result.url[:2000],
+                                monitor_url=candidate_url,
+                            )
                             query_duplicates += 1
                             category_stats.duplicates += 1
                             continue
@@ -367,6 +421,20 @@ class SourceDiscovery:
 
                         candidate_results += 1
                         outcome = self._save_candidate(candidate)
+                        self._log_diagnostic(
+                            event="source_assessment",
+                            query=query,
+                            category=category.name,
+                            result_url=result.url[:2000],
+                            monitor_url=candidate_url,
+                            domain=candidate_domain,
+                            status=outcome.status,
+                            created=outcome.created,
+                            analyzed=outcome.analyzed,
+                            ai_confidence=outcome.confidence,
+                            reason=outcome.reason,
+                            document_evidence_url=candidate.get("document_evidence_url"),
+                        )
 
                         if outcome.created:
                             added_sources += 1
@@ -578,6 +646,12 @@ class SourceDiscovery:
         query: str,
         category: DiscoveryCategory,
     ) -> dict[str, object] | None:
+        # Direct tender documents are evidence of the publisher's site, not
+        # standalone websites to be monitored as organization homepages.
+        original_url = self.quality_evaluator.normalise_url(result.url)
+        document_url = (
+            original_url if self._is_document_url(original_url) else None
+        )
         assessment = self.quality_evaluator.assess(
             title=result.title,
             description=result.description,
@@ -587,9 +661,6 @@ class SourceDiscovery:
         )
 
         if not assessment.base_url or not assessment.monitor_url:
-            return None
-
-        if self._is_document_url(assessment.monitor_url):
             return None
 
         parsed = urlparse(
@@ -626,6 +697,7 @@ class SourceDiscovery:
                 assessment.source_type
             ),
             "discovered_from": result.url,
+            "document_evidence_url": document_url,
             "discovery_query": query,
             "discovery_category": category.name,
             "tags": tags,
@@ -708,9 +780,23 @@ class SourceDiscovery:
                 + report_fetch_failure(exc),
             )
 
+        # New publication-document evidence must trigger a re-evaluation
+        # even when the organization's homepage HTML remains unchanged.
+        document_url = str(candidate.get("document_evidence_url") or "")
+        analysis_content = meaningful_content
+        if document_url:
+            analysis_content += (
+                "\nPublisher-hosted tender document found by search: "
+                + document_url
+                + "\nSearch result title: "
+                + str(candidate.get("page_title", ""))[:250]
+                + "\nSearch result summary: "
+                + str(candidate.get("description", ""))[:400]
+            )
+
         fingerprint = build_source_fingerprint(
             url=monitor_url,
-            meaningful_content=meaningful_content,
+            meaningful_content=analysis_content,
             country=str(candidate.get("country_context", self.country)),
         )
 
@@ -739,14 +825,15 @@ class SourceDiscovery:
                     created=False,
                     analyzed=False,
                     confidence=existing.ai_confidence,
+                    reason=existing.ai_reason,
                 )
 
         analysis_input = "\n".join(
             (
                 f"Page title: {candidate.get('page_title', '')}",
                 f"Search description: {candidate.get('description', '')}",
-                "Website content:",
-                meaningful_content,
+                "Website content and publisher document evidence:",
+                analysis_content,
             )
         )
 
@@ -841,6 +928,7 @@ class SourceDiscovery:
                 created=created,
                 analyzed=True,
                 confidence=analysis.confidence,
+                reason=analysis.reason,
             )
 
     def _persist_analysis_error(
@@ -927,6 +1015,7 @@ class SourceDiscovery:
             status="ERROR",
             created=created,
             analyzed=True,
+            reason=reason,
         )
 
     @staticmethod
@@ -1016,6 +1105,13 @@ class SourceDiscovery:
             float(str(candidate["priority_score"])),
         )
 
+        # A direct tender document is useful scanner evidence even if the
+        # publisher's overall discovery score has not increased.
+        new_evidence = str(candidate.get("document_evidence_url") or "")
+        old_evidence = str(existing.discovered_from or "")
+        if new_evidence and not self._is_document_url(old_evidence):
+            existing.discovered_from = new_evidence
+
         if not existing.organisation_name:
             existing.organisation_name = str(
                 candidate["organisation_name"]
@@ -1060,7 +1156,30 @@ class SourceDiscovery:
             soup = BeautifulSoup(response.text, "html.parser")
             for element in soup(("script", "style", "noscript", "template")):
                 element.decompose()
+            # Expose real publication navigation to the AI; a site's home
+            # text alone frequently omits its tender/announcements URLs.
+            publisher_netloc = urlparse(url).netloc.lower().removeprefix("www.")
+            useful_terms = (
+                "tender", "procurement", "announcement", "notice",
+                "opportunit", "consult", "call for", "rfp", "rfq",
+                "eoi", "vacanc", "careers", "bid", ".pdf",
+            )
+            links: list[str] = []
+            for anchor in soup.find_all("a", href=True):
+                href = str(anchor.get("href") or "").strip()
+                target = urljoin(url, href)
+                parsed = urlparse(target)
+                target_domain = parsed.netloc.lower().removeprefix("www.")
+                if parsed.scheme not in {"http", "https"} or target_domain != publisher_netloc:
+                    continue
+                label = anchor.get_text(" ", strip=True)[:100]
+                if any(term in (label + " " + parsed.path).lower() for term in useful_terms):
+                    links.append(f"{label}: {target}")
+                if len(links) >= 24:
+                    break
             text = soup.get_text(" ", strip=True)
+            if links:
+                text += "\nPublisher's public opportunity navigation:\n" + "\n".join(links)
 
         meaningful_content = self._clean_text(text)
         if not meaningful_content:
