@@ -222,6 +222,42 @@ DISCOVERY_CATEGORIES: tuple[
         ),
     ),
 
+    # High-yield services for UT CPA LTD and UT CONSULTING LTD. These
+    # targeted searches complement broad source discovery, rather than
+    # filtering out other legitimate Rwandan buyers or websites.
+    DiscoveryCategory(
+        name="Audit and financial advisory buyers",
+        query_templates=(
+            '"{country}" external audit accounting tender consulting',
+            '"{country}" tax advisory financial management request for proposals',
+        ),
+        tags=("procurement", "consulting", "finance"),
+    ),
+    DiscoveryCategory(
+        name="Research and impact evaluation buyers",
+        query_templates=(
+            '"{country}" monitoring evaluation research consultancy terms of reference',
+            '"{country}" institutional assessment feasibility study consultant tender',
+        ),
+        tags=("procurement", "consulting", "research"),
+    ),
+    DiscoveryCategory(
+        name="Financial inclusion and policy research",
+        query_templates=(
+            '"{country}" financial inclusion policy research consultancy',
+            '"{country}" impact evaluation policy brief request for proposal',
+        ),
+        tags=("consulting", "research"),
+    ),
+    DiscoveryCategory(
+        name="Rwandan corporate and nonprofit websites",
+        query_templates=(
+            '"{country}" banks insurers telecoms hospital supplier procurement',
+            '"{country}" foundations social enterprises companies tenders careers',
+        ),
+        tags=("private", "procurement"),
+    ),
+
     DiscoveryCategory(
         name="Private sector procurement",
         query_templates=(
