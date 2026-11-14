@@ -1,0 +1,52 @@
+name: Verify bounded OCR and real audit tender
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/verify-ocr-release.yml]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      ENABLE_PDF_OCR: 'true'
+      PDF_OCR_CACHE_PATH: '.cache/test-pdf-ocr-cache.json'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install application and OCR dependencies
+        run: pip install -r requirements.txt
+      - name: Install native OCR engine
+        run: |
+          if ! command -v tesseract; then sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr; fi
+          tesseract --version | head -n 1
+      - name: Run regression tests and compile code
+        run: |
+          python -m compileall -q app
+          python -m pytest -q \
+            tests/unit/test_publisher_discovery_and_pdf.py \
+            tests/unit/intelligence/test_source_discovery_integration.py \
+            tests/unit/test_source_discovery_metrics.py \
+            tests/unit/test_scheduled_discovery.py \
+            tests/unit/test_daily_source_scan.py \
+            tests/integration/test_scanner_orchestration.py
+      - name: Verify real image-only external audit tender OCR
+        run: |
+          python - <<'PY'
+          import requests
+          from app.scanners.pdf_text import extract_pdf_text
+          from app.scanners.company_websites import CompanyWebsiteScanner
+          url="https://www.ralga.rw/fileadmin/user_upload/RALGA/Announcements/Tender_Notice-Audit_Services.pdf"
+          text=extract_pdf_text(requests.Session(),url)
+          print("REAL_SCANNED_TENDER_CHARS",len(text))
+          print("OCR_PREVIEW",text[:800])
+          print("EXTRACTED_DEADLINE",CompanyWebsiteScanner()._extract_deadline(text))
+          assert len(text)>80, "The real scanned tender must produce usable OCR text"
+          assert "audit" in text.lower(), "OCR should recognize the document's audit scope"
+          PY
