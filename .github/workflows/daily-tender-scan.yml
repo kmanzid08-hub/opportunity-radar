@@ -33,6 +33,8 @@ jobs:
       AUTOMATION_MODE: "scan"
       ENABLE_INTERNAL_SCHEDULER: "false"
       DAILY_SOURCE_SCAN: 'true'
+      ENABLE_PDF_OCR: 'true'
+      PDF_OCR_CACHE_PATH: '.cache/pdf_ocr_cache.json'
 
     steps:
       - name: Check out AI-enabled application
@@ -49,6 +51,22 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - name: Install image-only PDF OCR engine when available
+        shell: bash
+        run: |
+          if ! command -v tesseract >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr || echo "OCR engine unavailable; scanning still continues"
+          fi
+          if command -v tesseract >/dev/null 2>&1; then tesseract --version | head -n 1; fi
+
+      - name: Restore reusable scanned-tender OCR text
+        uses: actions/cache@v4
+        with:
+          path: .cache/pdf_ocr_cache.json
+          key: pdf-ocr-${{ github.run_id }}
+          restore-keys: |
+            pdf-ocr-
 
       - name: Verify AI matching credentials
         shell: bash
