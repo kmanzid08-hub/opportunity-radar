@@ -389,3 +389,19 @@ def test_ocr_is_bounded_and_skips_large_files_or_missing_engine(monkeypatch):
     assert pdf_ocr.ocr_image_only_pdf(
         b"%PDF-1.7\n" + b"x" * (pdf_ocr.MAX_OCR_PDF_BYTES + 1)
     ) == ""
+
+
+def test_deadline_parsing_from_actual_ocr_style_notice():
+    scanner = CompanyWebsiteScanner()
+    text = (
+        "Bids properly bound in separate sealed envelopes, one for technical "
+        "proposal and another for financial, shall be submitted to the "
+        "association's office no later than 12 November 2026 at 2.30 pm."
+    )
+    assert scanner._extract_deadline(text) == date(2026, 11, 12)
+    assert scanner._extract_deadline(
+        "Technical proposals must be submitted by 20 November 2026."
+    ) == date(2026, 11, 20)
+    assert scanner._extract_deadline(
+        "Proposals shall be received by 12/11/2026 at 14:30."
+    ) == date(2026, 11, 12)
