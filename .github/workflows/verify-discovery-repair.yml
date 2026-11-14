@@ -34,6 +34,8 @@ jobs:
             tests/unit/test_scheduled_discovery.py \
             tests/unit/test_daily_source_scan.py \
             tests/integration/test_scanner_orchestration.py
+      - name: Run broader crawler and discovery compatibility suite
+        run: python -m pytest -q tests -k 'source_discovery or source_quality or pdf or scanner or publisher or scheduled_discovery'
       - name: Compile website templates
         run: |
           python - <<'PY'
