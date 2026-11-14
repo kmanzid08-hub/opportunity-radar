@@ -1179,7 +1179,12 @@ class SourceDiscovery:
                     break
             text = soup.get_text(" ", strip=True)
             if links:
-                text += "\nPublisher's public opportunity navigation:\n" + "\n".join(links)
+                # Put links first so the 50k-character AI context limit
+                # never hides publication navigation behind a long homepage.
+                text = (
+                    "Publisher's public opportunity navigation:\n"
+                    + "\n".join(links) + "\n" + text
+                )
 
         meaningful_content = self._clean_text(text)
         if not meaningful_content:
