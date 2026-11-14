@@ -55,5 +55,5 @@ jobs:
             exit 1
           fi
 
-      - name: Discover and AI-evaluate websites when due
+      - name: Discover and AI-evaluate Rwanda websites when due
         run: python -m app.scheduled_discovery
