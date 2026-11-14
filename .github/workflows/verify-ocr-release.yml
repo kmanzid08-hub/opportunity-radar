@@ -45,7 +45,8 @@ jobs:
           url="https://www.ralga.rw/fileadmin/user_upload/RALGA/Announcements/Tender_Notice-Audit_Services.pdf"
           text=extract_pdf_text(requests.Session(),url)
           print("REAL_SCANNED_TENDER_CHARS",len(text))
-          print("OCR_PREVIEW",text[:800])
+          print("OCR_TAIL",text[-1400:])
+          print("DATE_TERMS",[(term,text.lower().find(term)) for term in ("deadline","12 november","november","submission","before","close")])
           print("EXTRACTED_DEADLINE",CompanyWebsiteScanner()._extract_deadline(text))
           assert len(text)>80, "The real scanned tender must produce usable OCR text"
           assert "audit" in text.lower(), "OCR should recognize the document's audit scope"
