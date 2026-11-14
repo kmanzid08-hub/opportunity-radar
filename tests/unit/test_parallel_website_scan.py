@@ -34,11 +34,11 @@ def test_daily_scan_uses_independent_http_sessions_for_parallel_sources(monkeypa
     monkeypatch.setattr(CompanyWebsiteScanner, "_record_scan_success", lambda self, **_: None)
     monkeypatch.setattr(CompanyWebsiteScanner, "_record_scan_failure", lambda self, **_: None)
 
-    seen=set()
+    seen=[]
     lock=threading.Lock()
     def fake_crawl(self, item):
         with lock:
-            seen.add(id(self))
+            seen.append(self)  # Keep objects alive; Python can reuse freed object IDs.
         return [RawOpportunity(
             organisation_name=item.organisation_name,
             title=f"Audit consultancy {item.id}",
@@ -50,7 +50,7 @@ def test_daily_scan_uses_independent_http_sessions_for_parallel_sources(monkeypa
     results=CompanyWebsiteScanner().scan()
     assert len(results)==5
     assert len({x.source_url for x in results})==5
-    assert len(seen)==5  # Every task gets its own crawler, not a shared Session.
+    assert len(seen)==5 and len({id(crawler.session) for crawler in seen}) == 5
 
 
 def test_robots_rules_use_bounded_http_timeout_and_are_cached(monkeypatch):
