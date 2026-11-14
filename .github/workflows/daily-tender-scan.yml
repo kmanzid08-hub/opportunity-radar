@@ -2,7 +2,8 @@ name: Daily tender scan
 
 on:
   schedule:
-    - cron: "0 4 * * *"
+    # Run after daily source discovery so newly saved websites are included.
+    - cron: "0 8 * * *"
       timezone: "Africa/Kigali"
   workflow_dispatch:
   # Permit a tagged workflow-file commit to scan saved sources and match both active companies.
