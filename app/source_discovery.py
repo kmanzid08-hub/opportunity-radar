@@ -273,6 +273,67 @@ class SourceDiscovery:
         except OSError as exc:
             print(f"Discovery diagnostic export unavailable: {type(exc).__name__}")
 
+    def _retry_failed_source_analyses(self, limit: int = 12) -> int:
+        """Reconsider a bounded set of older AI errors without Brave searches.
+
+        On quota/temporary AI failures a valid site was already retained in
+        the database but was inactive. Retrying avoids depending on Brave
+        ranking the same source again. Permanent 403/invalid pages are skipped.
+        """
+        with SessionLocal() as db:
+            rows = db.scalars(
+                select(Source)
+                .where(
+                    Source.ai_status == "ERROR",
+                    Source.ai_reason.like("Gemini%"),
+                    Source.is_auto_disabled.is_(False),
+                )
+                .order_by(Source.ai_analyzed_at.asc(), Source.id.asc())
+                .limit(limit)
+            ).all()
+            backlog = [
+                {
+                    "organisation_name": row.organisation_name or row.domain,
+                    "base_url": row.base_url,
+                    "monitor_url": row.monitor_url,
+                    "domain": row.domain,
+                    "source_type": row.source_type,
+                    "discovered_from": row.discovered_from or row.monitor_url,
+                    "discovery_query": "Recheck earlier AI classification error",
+                    "discovery_category": "Retry earlier AI error",
+                    "page_title": row.organisation_name or row.domain,
+                    "description": "Previously discovered possible public opportunity publisher.",
+                    "country_context": self.country,
+                    "tags": ("opportunity",),
+                    "confidence_score": float(row.confidence_score or 0),
+                    "priority_score": float(row.priority_score or 0),
+                    "url_relevance_score": float(row.url_relevance_score or 0),
+                    "document_evidence_url": (
+                        row.discovered_from
+                        if row.discovered_from and self._is_document_url(row.discovered_from)
+                        else None
+                    ),
+                }
+                for row in rows
+            ]
+
+        recovered = 0
+        for candidate in backlog:
+            outcome = self._save_candidate(candidate)
+            self._log_diagnostic(
+                event="retry_previous_ai_error",
+                monitor_url=candidate["monitor_url"],
+                status=outcome.status,
+                reason=outcome.reason,
+            )
+            if outcome.status == AnalysisDecision.ACCEPT.value:
+                recovered += 1
+        print(
+            f"Previous AI-error sources retried: {len(backlog)}; "
+            f"newly accepted: {recovered}"
+        )
+        return recovered
+
     def run(self) -> dict[str, int | float]:
         """
         Run all configured discovery queries.
@@ -292,6 +353,18 @@ class SourceDiscovery:
         query_runtime_total = 0.0
         seen_urls: set[str] = set()
         domain_slots: dict[str, int] = {}
+
+        if os.getenv("RETRY_FAILED_SOURCE_ANALYSES", "").strip().lower() in {
+            "true", "1", "yes", "on"
+        }:
+            try:
+                self._retry_failed_source_analyses()
+            except Exception as exc:
+                # A failed recovery pass must not block new Brave discovery.
+                print(
+                    "Previous source AI recovery unavailable: "
+                    f"{type(exc).__name__}: {str(exc)[:180]}"
+                )
 
         category_queries = tuple(
             (
