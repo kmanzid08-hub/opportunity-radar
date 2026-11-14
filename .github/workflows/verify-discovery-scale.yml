@@ -14,7 +14,6 @@ jobs:
     timeout-minutes: 15
     env:
       ENABLE_INTERNAL_SCHEDULER: 'false'
-      DAILY_SOURCE_SCAN: 'true'
     steps:
       - name: Check out updated discovery and scanner
         uses: actions/checkout@v4
@@ -38,6 +37,8 @@ jobs:
             tests/unit/test_scheduled_discovery.py \
             tests/unit/test_daily_source_scan.py \
             tests/integration/test_scanner_orchestration.py
+      - name: Run complete application regression suite
+        run: python -m pytest -q tests
       - name: Check all website templates
         run: |
           python - <<'PY'
