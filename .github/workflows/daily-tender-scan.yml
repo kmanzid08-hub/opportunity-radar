@@ -2,7 +2,7 @@ name: Daily tender scan
 
 on:
   schedule:
-    # Run after daily source discovery so newly saved websites are included.
+    # Run after daily source discovery; also support an explicit post-discovery scan.
     - cron: "0 8 * * *"
       timezone: "Africa/Kigali"
   workflow_dispatch:
