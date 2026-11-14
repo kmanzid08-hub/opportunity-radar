@@ -195,3 +195,35 @@ def test_classification_error_is_reported_and_scan_continues(
     assert "Relevant opportunities:        0" in output
     assert "New opportunities saved:       0" in output
     assert "Classification failures:       1" in output
+
+
+def test_website_listings_are_saved_before_later_publishers_finish(
+    isolated_session_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Slow websites must not block earlier completed sites from populating the feed."""
+    _configure_isolated_scan(
+        monkeypatch,
+        isolated_session_factory,
+        [_qualifying_opportunity()],
+    )
+
+    from app.scanners.company_websites import CompanyWebsiteScanner
+
+    observed_intermediate_count: list[int] = []
+
+    class StreamingPublisher(CompanyWebsiteScanner):
+        def iter_opportunities(self):
+            yield _qualifying_opportunity()
+            with isolated_session_factory() as session:
+                observed_intermediate_count.append(
+                    session.scalar(select(func.count()).select_from(Opportunity))
+                )
+            yield _rejected_opportunity()
+
+    monkeypatch.setattr(scanner, "get_scanners", lambda: [StreamingPublisher()])
+    scanner.run_scanner()
+
+    assert observed_intermediate_count == [1]
+    with isolated_session_factory() as session:
+        assert session.scalar(select(func.count()).select_from(Opportunity)) == 1
