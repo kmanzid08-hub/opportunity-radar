@@ -1,0 +1,151 @@
+name: Export Opportunity Radar database URLs (one-time)
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/export-source-url-list.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  export-source-urls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      ENABLE_INTERNAL_SCHEDULER: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PostgreSQL client
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Export monitored source URLs and stored opportunity URLs
+        shell: bash
+        run: |
+          python - <<'PY'
+          from collections import Counter
+          import csv
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import os
+
+          import psycopg
+          from psycopg.rows import dict_row
+
+          url = os.environ.get("DATABASE_URL", "")
+          if not url:
+              raise RuntimeError("DATABASE_URL repository secret not configured")
+          # SQLAlchemy URL prefix is not a PostgreSQL libpq driver URI.
+          url = url.replace("postgresql+psycopg://", "postgresql://", 1)
+          base = Path("exported-urls")
+          base.mkdir(exist_ok=True)
+          source_sql = """
+              SELECT id, organisation_name, domain, source_type, base_url,
+                     monitor_url, discovered_from, is_active, is_approved,
+                     is_auto_disabled, ai_status, first_discovered_at,
+                     last_scanned_at, total_opportunities_found
+              FROM sources ORDER BY domain, monitor_url, id
+          """
+          opportunity_sql = """
+              SELECT id, organisation_name, title, source_name, source_url,
+                     original_source_url, deadline, is_expired, created_at
+              FROM opportunities ORDER BY id
+          """
+
+          def write_csv(path, items, headers):
+              with path.open("w", encoding="utf-8", newline="") as stream:
+                  writer = csv.DictWriter(stream, fieldnames=headers)
+                  writer.writeheader()
+                  for record in items:
+                      writer.writerow({name: record.get(name) for name in headers})
+
+          with psycopg.connect(url, connect_timeout=15, autocommit=False, row_factory=dict_row) as db:
+              with db.cursor() as cur:
+                  cur.execute("BEGIN TRANSACTION READ ONLY")
+                  cur.execute(source_sql)
+                  sources = cur.fetchall()
+                  cur.execute(opportunity_sql)
+                  opportunities = cur.fetchall()
+
+          source_cols = [
+              "id", "organisation_name", "domain", "source_type",
+              "monitor_url", "base_url", "discovered_from",
+              "is_active", "is_approved", "is_auto_disabled", "ai_status",
+              "first_discovered_at", "last_scanned_at", "total_opportunities_found",
+          ]
+          opportunity_cols = [
+              "id", "organisation_name", "title", "source_name",
+              "source_url", "original_source_url", "deadline", "is_expired", "created_at",
+          ]
+          write_csv(base / "all_monitored_sources.csv", sources, source_cols)
+          write_csv(base / "opportunity_notice_urls.csv", opportunities, opportunity_cols)
+
+          monitor_urls = sorted({s["monitor_url"].strip() for s in sources if s["monitor_url"]})
+          domains = sorted({s["domain"].strip() for s in sources if s["domain"]})
+          (base / "source_monitor_urls.txt").write_text(
+              "\n".join(monitor_urls) + ("\n" if monitor_urls else ""), encoding="utf-8"
+          )
+          (base / "unique_domains.txt").write_text(
+              "\n".join(domains) + ("\n" if domains else ""), encoding="utf-8"
+          )
+
+          # Every URL field in the two main operational URL-bearing tables.
+          refs = []
+          for s in sources:
+              for field in ("monitor_url", "base_url", "discovered_from"):
+                  if s.get(field):
+                      refs.append({
+                          "table": "sources", "record_id": s["id"],
+                          "url_type": field, "url": s[field],
+                      })
+          for o in opportunities:
+              for field in ("source_url", "original_source_url"):
+                  if o.get(field):
+                      refs.append({
+                          "table": "opportunities", "record_id": o["id"],
+                          "url_type": field, "url": o[field],
+                      })
+          write_csv(
+              base / "all_source_and_opportunity_url_references.csv",
+              refs, ["table", "record_id", "url_type", "url"],
+          )
+
+          active = sum(bool(s["is_active"] and s["is_approved"] and not s["is_auto_disabled"]) for s in sources)
+          approved = sum(bool(s["is_approved"]) for s in sources)
+          counters = Counter(str(s["ai_status"] or "NOT_ANALYZED") for s in sources)
+          summary = [
+              "Opportunity Radar URL inventory (read-only production snapshot)",
+              f"Exported (UTC): {datetime.now(timezone.utc).isoformat()}",
+              f"Total saved source records: {len(sources)}",
+              f"Distinct monitored source URLs: {len(monitor_urls)}",
+              f"Distinct source domains: {len(domains)}",
+              f"AI-approved source records: {approved}",
+              f"Active and approved non-disabled sources: {active}",
+              f"Stored opportunities: {len(opportunities)}",
+              f"Source AI status breakdown: {dict(counters)}",
+              "",
+              "all_monitored_sources.csv: every source record, including inactive and pending",
+              "source_monitor_urls.txt: one unique monitoring URL per line",
+              "unique_domains.txt: one unique domain per line",
+              "opportunity_notice_urls.csv: stored opportunity notices, separate from sites",
+              "all_source_and_opportunity_url_references.csv: all URL-valued",
+              "  columns from sources and opportunities, including repeated references",
+              "",
+              "No secrets, account credentials, or business profile data are exported.",
+          ]
+          (base / "README.txt").write_text("\n".join(summary) + "\n", encoding="utf-8")
+          for line in summary[:9]:
+              print(line)
+          PY
+      - name: Upload private export for repository owner
+        uses: actions/upload-artifact@v4
+        with:
+          name: opportunity-radar-urls
+          path: exported-urls/
+          retention-days: 14
+          if-no-files-found: error
