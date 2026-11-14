@@ -57,9 +57,13 @@ def test_robots_rules_use_bounded_http_timeout_and_are_cached(monkeypatch):
     monkeypatch.delenv("WEBSITE_SCAN_WORKERS", raising=False)
     scanner=CompanyWebsiteScanner()
     calls=[]
+    class FakeRaw(BytesIO):
+        def read(self, n=-1, decode_content=False):
+            return super().read(n)
     class FakeResponse:
         status_code=200
-        raw=BytesIO(b"User-agent: *\nDisallow: /private\n")
+        def __init__(self):
+            self.raw=FakeRaw(b"User-agent: *\\nDisallow: /private\\n")
         def __enter__(self):
             return self
         def __exit__(self, *args):
