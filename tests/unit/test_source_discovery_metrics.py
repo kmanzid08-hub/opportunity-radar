@@ -70,6 +70,10 @@ def test_categories_are_complete_and_country_parameterized(
         "Research and impact evaluation buyers",
         "Financial inclusion and policy research",
         "Rwandan corporate and nonprofit websites",
+        "Local government and membership associations",
+        "Civil society and nonprofit organizations",
+        "Districts and decentralized public institutions",
+        "Professional associations and sector federations",
     }
 
     queries = tuple(
