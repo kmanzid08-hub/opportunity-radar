@@ -2,11 +2,11 @@ name: Daily tender scan
 
 on:
   schedule:
-    # Run after daily source discovery so newly saved websites are included.
+    # Run after daily source discovery; also support an explicit post-discovery scan.
     - cron: "0 8 * * *"
       timezone: "Africa/Kigali"
   workflow_dispatch:
-  # Permit a tagged workflow-file commit to scan saved sources and match both active companies.
+  # Tagged releases scan newly discovered sources using cached OCR and match both active companies.
   # Ordinary code pushes do not start extra production scans.
   push:
     branches:
@@ -22,7 +22,7 @@ jobs:
   scan:
     if: github.event_name != 'push' || contains(github.event.head_commit.message, '[run-scan]')
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 150
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
@@ -33,8 +33,12 @@ jobs:
       AUTOMATION_MODE: "scan"
       ENABLE_INTERNAL_SCHEDULER: "false"
       DAILY_SOURCE_SCAN: 'true'
+      WEBSITE_SCAN_WORKERS: '6'
+      WEBSITE_MAX_PAGES_PER_SOURCE: '12'
+      WEBSITE_CRAWL_BUDGET_SECONDS: '55'
       ENABLE_PDF_OCR: 'true'
       PDF_OCR_CACHE_PATH: '.cache/pdf_ocr_cache.json'
+      FORCE_WEBSITE_DISCOVERY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[run-scan]') }}
 
     steps:
       - name: Check out AI-enabled application
@@ -76,7 +80,10 @@ jobs:
             exit 1
           fi
 
-      - name: Scan and qualify opportunities with AI
+      - name: Ensure website discovery completes before daily matching
+        run: python -m app.scheduled_discovery
+
+      - name: Scan and qualify newly discovered opportunities with AI
         run: python -m app.automation_run
 
       - name: Match existing verified notices to new business profiles
