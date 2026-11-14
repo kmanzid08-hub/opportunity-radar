@@ -1397,59 +1397,47 @@ class CompanyWebsiteScanner(BaseScanner):
             "html.parser",
         )
 
-    def _can_fetch(
-        self,
-        url: str,
-    ) -> bool:
+    def _can_fetch(self, url: str) -> bool:
+        """Honor robots.txt without unbounded urllib network waits.
 
-        parsed = urlparse(
-            url
-        )
-
-        robots_url = (
-            f"{parsed.scheme}://"
-            f"{parsed.netloc}/robots.txt"
-        )
-
-        parser = (
-            self.robot_parsers.get(
-                robots_url
-            )
-        )
-
+        RobotFileParser.read() uses urllib's implicit global timeout and
+        could hold the entire daily scan indefinitely on a stalled website.
+        A bounded requests fetch makes site crawling predictable.
+        """
+        parsed = urlparse(url)
+        robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+        parser = self.robot_parsers.get(robots_url)
         if parser is None:
-            parser = (
-                robotparser.RobotFileParser()
-            )
-
-            parser.set_url(
-                robots_url
-            )
-
+            parser = robotparser.RobotFileParser()
+            parser.set_url(robots_url)
             try:
-                parser.read()
-
-            except Exception:
-                parser = (
-                    robotparser.RobotFileParser()
-                )
-
-                parser.parse(
-                    []
-                )
-
-            self.robot_parsers[
-                robots_url
-            ] = parser
-
+                with self.session.get(
+                    robots_url,
+                    timeout=(3, 5),
+                    allow_redirects=True,
+                    stream=True,
+                ) as response:
+                    if response.status_code == 200:
+                        # robots files are normally small. Avoid arbitrary
+                        # downloads from untrusted or misconfigured sites.
+                        content = response.raw.read(100_001, decode_content=True)
+                        if len(content) > 100_000:
+                            parser.parse(["User-agent: *", "Disallow: /"])
+                        else:
+                            parser.parse(content.decode("utf-8", errors="replace").splitlines())
+                    elif response.status_code in {404, 410}:
+                        parser.parse([])
+                    else:
+                        # If robots cannot be checked, avoid a speculative
+                        # crawl; retry the source on a later scheduled run.
+                        parser.parse(["User-agent: *", "Disallow: /"])
+            except requests.RequestException:
+                parser.parse(["User-agent: *", "Disallow: /"])
+            self.robot_parsers[robots_url] = parser
         try:
-            return parser.can_fetch(
-                self.USER_AGENT,
-                url,
-            )
-
+            return parser.can_fetch(self.USER_AGENT, url)
         except Exception:
-            return True
+            return False
 
     def _record_scan_started(
         self,
