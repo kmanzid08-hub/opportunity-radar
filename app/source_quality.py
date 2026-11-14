@@ -87,6 +87,12 @@ class SourceQualityEvaluator:
         "/eoi",
         "/bid",
         "/supplier",
+        "/announcement",
+        "/notice",
+        "/calls-for",
+        "/call-for-proposal",
+        "/request-for-proposal",
+        "/request-for-quotation",
     )
 
     TRUSTED_ORGANISATION_TERMS = (
@@ -243,23 +249,21 @@ class SourceQualityEvaluator:
         self,
         url: str,
     ) -> str:
-        """
-        Keep a specialised procurement/careers page when one is found.
-        Otherwise monitor the organisation's homepage.
-        """
-        lowered_url = url.lower()
+        """Retain publication sections; never attempt to crawl a document as a site.
 
-        if any(
-            term in lowered_url
-            for term in self.HIGH_VALUE_PATH_TERMS
-        ):
-            return url.rstrip("/")
-
+        Procurement and announcement pages are first-class source entrypoints.
+        Generic news/blog pages still resolve to the organization homepage.
+        PDF/direct-document hits preserve the origin separately for the scanner.
+        """
         parsed = urlparse(url)
+        base = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+        path = parsed.path.lower()
+        if path.endswith((".pdf", ".doc", ".docx", ".xls", ".xlsx")):
+            return base
 
-        return (
-            f"{parsed.scheme}://{parsed.netloc}"
-        ).rstrip("/")
+        if any(term in path for term in self.HIGH_VALUE_PATH_TERMS):
+            return url.rstrip("/")
+        return base
 
     def calculate_url_relevance(
         self,
