@@ -1,0 +1,99 @@
+name: Diagnose Discover funnel read-only
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/diagnose-match-funnel-once.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install database-only driver
+        run: pip install 'psycopg[binary]>=3.2,<4'
+      - name: Inspect sources, opportunities and company matches without changes
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+          from psycopg.rows import dict_row
+          url = os.environ['DATABASE_URL'].replace('postgresql+psycopg://','postgresql://',1)
+          checks = {
+            'SOURCE_COUNTS': """
+              SELECT COUNT(*) total,
+                COUNT(*) FILTER (WHERE is_active AND is_approved AND NOT is_auto_disabled) approved_active,
+                COUNT(*) FILTER (WHERE last_scanned_at IS NOT NULL) ever_scanned,
+                COUNT(*) FILTER (WHERE last_scanned_at::date = CURRENT_DATE) scanned_today_utc,
+                COUNT(*) FILTER (WHERE last_scan_started_at >= NOW()-INTERVAL '2 hours') scanned_last_2h,
+                COUNT(*) FILTER (WHERE ai_status='ERROR') source_ai_errors,
+                COUNT(DISTINCT domain) distinct_domains
+              FROM sources
+            """,
+            'OPPORTUNITY_COUNTS': """
+              SELECT COUNT(*) total,
+                COUNT(*) FILTER (WHERE workspace_id IS NULL) shared,
+                COUNT(*) FILTER (WHERE is_expired) expired,
+                COUNT(*) FILTER (WHERE deadline IS NULL) no_deadline,
+                COUNT(*) FILTER (WHERE deadline >= CURRENT_DATE) future_deadline,
+                COUNT(*) FILTER (WHERE first_discovered_at >= NOW()-INTERVAL '4 hours') discovered_last_4h,
+                COUNT(*) FILTER (WHERE category = 'Call For Proposal') call_for_proposal
+              FROM opportunities
+            """,
+            'COMPANIES': """
+              SELECT o.id, o.name, o.is_active, p.minimum_match_score
+              FROM organizations o LEFT JOIN opportunity_preferences p ON p.organization_id=o.id
+              ORDER BY o.id
+            """,
+            'MATCH_SUMMARY': """
+              SELECT COALESCE(o.name,'unknown') company, COUNT(*) matches_total,
+                COUNT(*) FILTER (WHERE m.qualifies_for_feed) qualifies,
+                COUNT(*) FILTER (WHERE m.qualifies_for_feed AND m.error_reason IS NULL AND NOT x.is_expired
+                      AND (x.deadline IS NULL OR x.deadline >= CURRENT_DATE)
+                      AND x.status IN ('New','Seen','Interested')) active_qualified,
+                COUNT(*) FILTER (WHERE m.error_reason IS NOT NULL) match_errors,
+                COUNT(*) FILTER (WHERE m.score >= 70) score_ge_70,
+                COUNT(*) FILTER (WHERE m.match_strength IN ('STRONG','VERY_STRONG')) strong,
+                MIN(m.matched_at) oldest_match, MAX(m.matched_at) newest_match
+              FROM company_opportunity_matches m
+              JOIN organizations o ON o.id=m.organization_id
+              JOIN opportunities x ON x.id=m.opportunity_id
+              GROUP BY o.name ORDER BY o.name
+            """,
+            'MATCH_TOP_REJECTED': """
+              SELECT o.name AS company, m.match_strength, m.qualifies_for_feed,
+                (m.error_reason IS NOT NULL) has_error,
+                COUNT(*) AS count
+              FROM company_opportunity_matches m JOIN organizations o ON o.id=m.organization_id
+              GROUP BY o.name, m.match_strength,m.qualifies_for_feed,(m.error_reason IS NOT NULL)
+              ORDER BY o.name,count DESC LIMIT 24
+            """,
+            'SOURCE_RALGA': """
+              SELECT domain,monitor_url,is_active,is_approved,ai_status,last_scanned_at,
+                total_opportunities_found FROM sources WHERE domain='ralga.rw'
+            """,
+            'PENDING_WORK': """
+              SELECT COUNT(*) FILTER (WHERE is_active AND is_approved AND NOT is_auto_disabled
+                AND last_scanned_at IS NULL) unscanned_active,
+                COUNT(*) FILTER (WHERE last_scan_started_at >= NOW() - INTERVAL '1 hour') started_last_hour
+              FROM sources
+            """,
+          }
+          with psycopg.connect(url,connect_timeout=15, row_factory=dict_row) as db:
+            with db.cursor() as cur:
+              cur.execute("BEGIN TRANSACTION READ ONLY")
+              for label,sql in checks.items():
+                cur.execute(sql)
+                data=cur.fetchall()
+                print('RESULT',label,[dict(row) for row in data],flush=True)
+          PY
