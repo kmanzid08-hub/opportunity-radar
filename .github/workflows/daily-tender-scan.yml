@@ -22,7 +22,7 @@ jobs:
   scan:
     if: github.event_name != 'push' || contains(github.event.head_commit.message, '[run-scan]')
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 150
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
@@ -35,6 +35,7 @@ jobs:
       DAILY_SOURCE_SCAN: 'true'
       ENABLE_PDF_OCR: 'true'
       PDF_OCR_CACHE_PATH: '.cache/pdf_ocr_cache.json'
+      FORCE_WEBSITE_DISCOVERY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[run-scan]') }}
 
     steps:
       - name: Check out AI-enabled application
@@ -75,6 +76,9 @@ jobs:
             echo "::error::DATABASE_URL and GEMINI_API_KEY must be configured as repository Actions secrets."
             exit 1
           fi
+
+      - name: Ensure website discovery completes before daily matching
+        run: python -m app.scheduled_discovery
 
       - name: Scan and qualify newly discovered opportunities with AI
         run: python -m app.automation_run
