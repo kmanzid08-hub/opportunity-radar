@@ -57,7 +57,7 @@ jobs:
             exit 1
           fi
 
-      - name: Discover and AI-evaluate Rwanda websites when due
+      - name: Discover and AI-evaluate Rwanda publisher websites
         run: python -m app.scheduled_discovery
       - name: Save per-candidate discovery audit trail
         if: always()
