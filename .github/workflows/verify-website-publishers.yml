@@ -1,4 +1,4 @@
-name: Verify publisher discovery and fast bounded scanning
+name: Verify fast publisher scans and robots policy
 on:
   push:
     branches: [main]
