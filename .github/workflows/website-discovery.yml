@@ -1,30 +1,42 @@
 name: Website discovery
 
 on:
-  # Run website discovery every five days. The Python job also uses the
-  # shared database to prevent an early duplicate execution.
+  # Discover and retain newly found websites every Rwanda calendar day.
+  # The Python job keeps durable last-success state to avoid duplicate runs.
   schedule:
-    - cron: "20 4 */5 * *"
+    - cron: "20 4 * * *"
       timezone: "Africa/Kigali"
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/website-discovery.yml
 
 concurrency:
-  group: opportunity-radar-website-discovery
+  group: opportunity-radar-data-pipeline
   cancel-in-progress: false
 
 jobs:
   discover:
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[run-discovery]')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_FALLBACK_ENABLED: ${{ vars.OPENAI_FALLBACK_ENABLED || 'true' }}
+      OPENAI_FALLBACK_MODEL: ${{ vars.OPENAI_FALLBACK_MODEL || 'gpt-5-mini' }}
       ENABLE_INTERNAL_SCHEDULER: "false"
-      FORCE_WEBSITE_DISCOVERY: ${{ github.event_name == 'workflow_dispatch' }}
+      FORCE_WEBSITE_DISCOVERY: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[run-discovery]')) }}
 
     steps:
-      - name: Check out repository
+      - name: Check out AI-enabled application
         uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -35,5 +47,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Discover new websites when due
+      - name: Verify source-discovery credentials
+        shell: bash
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$BRAVE_API_KEY" ] || [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::DATABASE_URL, BRAVE_API_KEY and GEMINI_API_KEY are required in Actions secrets."
+            exit 1
+          fi
+
+      - name: Discover and AI-evaluate websites when due
         run: python -m app.scheduled_discovery
