@@ -298,6 +298,7 @@ def test_discovery_reports_category_and_total_metrics(
         "rejected_results": 1,
         "review_results": 0,
         "ai_failures": 0,
+        "content_fetch_failures": 0,
         "failed_queries": 1,
         "configured_delay_seconds": 2.0,
         "total_runtime_seconds": 4.0,
