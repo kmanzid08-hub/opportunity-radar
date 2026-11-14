@@ -19,7 +19,11 @@ def _prepare_job(
     now: datetime,
     last_success: datetime | None,
 ) -> tuple[Mock, Mock]:
-    run_discovery = Mock(return_value={"added_sources": 1})
+    run_discovery = Mock(return_value={
+        "added_sources": 1,
+        "queries_executed": 1,
+        "failed_queries": 0,
+    })
     record_success = Mock()
     clock = Mock(
         side_effect=(now, now + timedelta(minutes=1))
@@ -65,7 +69,7 @@ def test_scheduled_not_forced_and_not_due_skips(
     run_discovery, record_success = _prepare_job(
         monkeypatch,
         now=now,
-        last_success=now - timedelta(hours=12),
+        last_success=now - timedelta(hours=5),
     )
 
     assert scheduled_discovery.main() == 0
