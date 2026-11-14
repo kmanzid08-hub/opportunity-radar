@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from urllib import robotparser
@@ -36,7 +37,7 @@ class CompanyWebsiteScanner(BaseScanner):
 
     source_name = "Company Websites"
 
-    REQUEST_TIMEOUT = 20
+    REQUEST_TIMEOUT = 12
     REQUEST_DELAY_SECONDS = 0.5
 
     MAX_SOURCES_PER_SCAN = 500
@@ -381,116 +382,106 @@ class CompanyWebsiteScanner(BaseScanner):
             robotparser.RobotFileParser,
         ] = {}
 
-    def scan(
-        self,
-    ) -> list[RawOpportunity]:
-
+    def scan(self) -> list[RawOpportunity]:
         sources = self._get_sources()
-
         print(
-            f"Found {len(sources)} "
-            "organisation websites due for scanning"
+            f"Found {len(sources)} organisation websites due for scanning",
+            flush=True,
         )
 
-        opportunities: dict[
-            str,
-            RawOpportunity,
-        ] = {}
+        opportunities: dict[str, RawOpportunity] = {}
+        try:
+            configured = int(os.getenv("WEBSITE_SCAN_WORKERS", "1"))
+        except ValueError:
+            configured = 1
+        workers = max(1, min(configured, 8, len(sources) or 1))
 
-        for source_number, source in enumerate(
-            sources,
-            start=1,
-        ):
-            organisation_name = (
-                source.organisation_name
-                or source.domain
-            )
-
+        if workers == 1:
+            # Preserve deterministic local behaviour and existing test hooks.
+            for number, source in enumerate(sources, start=1):
+                for item in self._scan_one_source(source, number, len(sources)):
+                    opportunities[item.source_url] = item
+        else:
             print(
-                "\nScanning organisation website "
-                f"{source_number}/{len(sources)}: "
-                f"{organisation_name}"
+                f"Scanning {len(sources)} sources with {workers} "
+                "independent site crawlers",
+                flush=True,
             )
+            # Every worker has its own requests.Session and robots cache.
+            # Database updates use separate short-lived SQLAlchemy sessions.
+            def scan_in_worker(source: Source, number: int) -> list[RawOpportunity]:
+                crawler = type(self)()
+                return crawler._scan_one_source(source, number, len(sources))
 
-            started_at = time.perf_counter()
-
-            self._record_scan_started(
-                source.id
-            )
-
-            try:
-                source_opportunities = (
-                    self._scan_source(
-                        source
-                    )
-                )
-
-                elapsed = (
-                    time.perf_counter()
-                    - started_at
-                )
-
-                self._record_scan_success(
-                    source_id=source.id,
-                    duration_seconds=elapsed,
-                    opportunities_found=len(
-                        source_opportunities
-                    ),
-                )
-
-            except Exception as exc:
-                elapsed = (
-                    time.perf_counter()
-                    - started_at
-                )
-
-                status_code = getattr(
-                    getattr(
-                        exc,
-                        "response",
-                        None,
-                    ),
-                    "status_code",
-                    None,
-                )
-
-                self._record_scan_failure(
-                    source_id=source.id,
-                    duration_seconds=elapsed,
-                    http_status=status_code,
-                    error_message=(
-                        f"{type(exc).__name__}: "
-                        f"{exc}"
-                    ),
-                )
-
-                print(
-                    "  Website scan failed: "
-                    f"{type(exc).__name__}: "
-                    f"{exc}"
-                )
-
-                continue
-
-            for opportunity in source_opportunities:
-                opportunities[
-                    opportunity.source_url
-                ] = opportunity
-
-            print(
-                "  Possible listings collected: "
-                f"{len(source_opportunities)}"
-            )
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {
+                    pool.submit(scan_in_worker, source, number): source
+                    for number, source in enumerate(sources, start=1)
+                }
+                for future in as_completed(futures):
+                    source = futures[future]
+                    try:
+                        listings = future.result()
+                    except Exception as exc:
+                        # Catch an unexpected worker-level error too.
+                        print(
+                            f"  Source worker failed for {source.domain}: "
+                            f"{type(exc).__name__}",
+                            flush=True,
+                        )
+                        continue
+                    for item in listings:
+                        opportunities[item.source_url] = item
 
         print(
             "\nCompany website scan completed: "
-            f"{len(opportunities)} "
-            "unique possible listings"
+            f"{len(opportunities)} unique possible listings",
+            flush=True,
         )
+        return list(opportunities.values())
 
-        return list(
-            opportunities.values()
+    def _scan_one_source(
+        self, source: Source, source_number: int, source_total: int
+    ) -> list[RawOpportunity]:
+        organisation_name = source.organisation_name or source.domain
+        print(
+            "\nScanning organisation website "
+            f"{source_number}/{source_total}: {organisation_name}",
+            flush=True,
         )
+        started_at = time.perf_counter()
+        self._record_scan_started(source.id)
+        try:
+            listings = self._scan_source(source)
+            elapsed = time.perf_counter() - started_at
+            self._record_scan_success(
+                source_id=source.id,
+                duration_seconds=elapsed,
+                opportunities_found=len(listings),
+            )
+        except Exception as exc:
+            elapsed = time.perf_counter() - started_at
+            response = getattr(exc, "response", None)
+            status_code = getattr(response, "status_code", None)
+            self._record_scan_failure(
+                source_id=source.id,
+                duration_seconds=elapsed,
+                http_status=status_code,
+                error_message=f"{type(exc).__name__}: {str(exc)[:350]}",
+            )
+            print(
+                f"  Website scan failed for {source.domain}: "
+                f"{type(exc).__name__}",
+                flush=True,
+            )
+            return []
+
+        print(
+            f"  Possible listings collected: {len(listings)} "
+            f"({elapsed:.1f}s)",
+            flush=True,
+        )
+        return listings
 
     def _get_sources(
         self,
@@ -724,13 +715,23 @@ class CompanyWebsiteScanner(BaseScanner):
             RawOpportunity,
         ] = {}
 
-        while (
-            queue
-            and len(
-                visited
-            )
-            < self.MAX_PAGES_PER_SOURCE
-        ):
+        try:
+            max_pages = int(os.getenv("WEBSITE_MAX_PAGES_PER_SOURCE", str(self.MAX_PAGES_PER_SOURCE)))
+            time_budget = float(os.getenv("WEBSITE_CRAWL_BUDGET_SECONDS", "0"))
+        except ValueError:
+            max_pages, time_budget = self.MAX_PAGES_PER_SOURCE, 0
+        max_pages = max(2, min(40, max_pages))
+        time_budget = max(0.0, min(240.0, time_budget))
+        site_started = time.perf_counter()
+
+        while queue and len(visited) < max_pages:
+            if time_budget and time.perf_counter() - site_started >= time_budget:
+                print(
+                    f"  Crawl budget reached at {len(visited)} pages "
+                    f"({time_budget:.0f}s)",
+                    flush=True,
+                )
+                break
             current_url, depth = (
                 queue.pop(0)
             )
