@@ -6,6 +6,7 @@ It is used only for already approved, robots-allowed publisher URLs.
 from __future__ import annotations
 
 from io import BytesIO
+import os
 
 import requests
 from pypdf import PdfReader
@@ -71,6 +72,17 @@ def extract_pdf_text(
                         break
         except Exception:
             return ""
-        return "\n".join(texts).strip()
+        result = "\n".join(texts).strip()
+        if result:
+            return result
+
+        # Image-only scans have no selectable text. OCR is an explicitly
+        # enabled, bounded fallback with a reusable content-hash cache.
+        if os.getenv("ENABLE_PDF_OCR", "").strip().lower() in {
+            "true", "yes", "1", "on"
+        }:
+            from app.scanners.pdf_ocr import ocr_image_only_pdf
+            return ocr_image_only_pdf(bytes(buffer))
+        return ""
     finally:
         response.close()
