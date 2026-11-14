@@ -276,6 +276,7 @@ def _empty_summary() -> dict[
         "rejected_results": 0,
         "review_results": 0,
         "ai_failures": 0,
+        "content_fetch_failures": 0,
         "failed_queries": 0,
         "configured_delay_seconds": 0.0,
         "total_runtime_seconds": 0.0,
@@ -307,6 +308,7 @@ def _merge_result(
         "rejected_results",
         "review_results",
         "ai_failures",
+        "content_fetch_failures",
         "failed_queries",
     )
 
