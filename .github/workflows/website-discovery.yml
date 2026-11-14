@@ -30,6 +30,7 @@ jobs:
       OPENAI_FALLBACK_MODEL: ${{ vars.OPENAI_FALLBACK_MODEL || 'gpt-5-mini' }}
       ENABLE_INTERNAL_SCHEDULER: "false"
       DISCOVERY_DIAGNOSTICS_PATH: "artifacts/source-discovery-decisions.jsonl"
+      RETRY_FAILED_SOURCE_ANALYSES: "true"
       FORCE_WEBSITE_DISCOVERY: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[run-discovery]')) }}
 
     steps:
