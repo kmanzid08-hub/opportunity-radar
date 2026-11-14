@@ -1,4 +1,4 @@
-name: Verify publisher-first discovery and PDF notices
+name: Verify publisher discovery and fast bounded scanning
 on:
   push:
     branches: [main]
