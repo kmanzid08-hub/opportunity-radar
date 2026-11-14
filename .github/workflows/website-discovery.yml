@@ -1,12 +1,16 @@
 name: Website discovery
 
 on:
-  # This workflow checks every day. The Python job uses the shared database
-  # to run the actual discovery only when five full days have elapsed.
+  # Discover and retain newly found websites every Rwanda calendar day.
+  # The Python job keeps durable last-success state to avoid duplicate runs.
   schedule:
     - cron: "20 4 * * *"
       timezone: "Africa/Kigali"
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/website-discovery.yml
 
 concurrency:
   group: opportunity-radar-data-pipeline
@@ -14,6 +18,7 @@ concurrency:
 
 jobs:
   discover:
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[run-discovery]')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -24,6 +29,7 @@ jobs:
       OPENAI_FALLBACK_ENABLED: ${{ vars.OPENAI_FALLBACK_ENABLED || 'true' }}
       OPENAI_FALLBACK_MODEL: ${{ vars.OPENAI_FALLBACK_MODEL || 'gpt-5-mini' }}
       ENABLE_INTERNAL_SCHEDULER: "false"
+      FORCE_WEBSITE_DISCOVERY: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[run-discovery]')) }}
 
     steps:
       - name: Check out AI-enabled application
