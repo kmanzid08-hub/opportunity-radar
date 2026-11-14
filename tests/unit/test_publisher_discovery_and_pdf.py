@@ -281,3 +281,53 @@ def test_permanently_blocked_site_not_retried_as_ai_failure(
         raise AssertionError("Blocked pages should not consume AI retries")
     discovery = _discovery(monkeypatch, analyzer=classify)
     assert discovery._retry_failed_source_analyses(limit=4) == 0
+
+
+def test_transient_timeout_in_source_library_is_reconsidered(
+    monkeypatch, isolated_session_factory
+):
+    monkeypatch.setattr(source_discovery, "SessionLocal", isolated_session_factory)
+    with isolated_session_factory() as db:
+        db.add(Source(
+            organisation_name="Regional Association",
+            base_url="https://regional.example.rw",
+            monitor_url="https://regional.example.rw",
+            domain="regional.example.rw", source_type="NGO",
+            ai_status="ERROR",
+            ai_reason="Source content could not be fetched for AI analysis. category=TIMEOUT http_status=None",
+            is_active=False, is_approved=False,
+        ))
+        db.commit()
+    evaluated = []
+    def classify(**kwargs):
+        evaluated.append(kwargs["url"])
+        return SourceAnalysis(
+            decision="ACCEPT", confidence=85,
+            reason="Public tenders on the organization website."
+        )
+    discovery = _discovery(monkeypatch, analyzer=classify)
+    assert discovery._retry_failed_source_analyses(limit=2) == 1
+    assert evaluated == ["https://regional.example.rw"]
+
+
+def test_permanent_forbidden_source_is_not_retried(
+    monkeypatch, isolated_session_factory
+):
+    monkeypatch.setattr(source_discovery, "SessionLocal", isolated_session_factory)
+    with isolated_session_factory() as db:
+        db.add(Source(
+            organisation_name="Private Buyer",
+            base_url="https://access-denied.example.rw",
+            monitor_url="https://access-denied.example.rw",
+            domain="access-denied.example.rw",
+            ai_status="ERROR",
+            ai_reason="Source content could not be fetched for AI analysis. category=BLOCKED http_status=403",
+            is_active=False, is_approved=False,
+            source_type="Unknown",
+        ))
+        db.commit()
+    discovery = _discovery(
+        monkeypatch,
+        analyzer=lambda **_: (_ for _ in ()).throw(AssertionError("Unexpected AI call")),
+    )
+    assert discovery._retry_failed_source_analyses(limit=2) == 0
