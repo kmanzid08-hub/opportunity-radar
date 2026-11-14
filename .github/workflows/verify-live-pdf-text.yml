@@ -1,0 +1,33 @@
+name: Verify actual Rwandan tender PDF text extraction
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/verify-live-pdf-text.yml]
+permissions:
+  contents: read
+jobs:
+  pdf-read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install 'pypdf>=5,<7' requests
+      - name: Inspect official public audit tender PDF via production extractor
+        run: |
+          python - <<'PY'
+          import requests
+          from app.scanners.pdf_text import extract_pdf_text
+          url = "https://www.ralga.rw/fileadmin/user_upload/RALGA/Announcements/Tender_Notice-Audit_Services.pdf"
+          content = extract_pdf_text(requests.Session(), url)
+          print("PARSED_PDF_CHARACTERS",len(content))
+          print("TEXT_PREVIEW",content[:500])
+          for term in ("deadline","closing","submission","audit","proposal"):
+              print("TEXT_CONTAINS",term,term in content.lower())
+          assert len(content)>80, "The original PDF is image-only or text extraction failed"
+          PY
