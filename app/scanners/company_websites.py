@@ -17,6 +17,7 @@ from app.models import Source
 from app.schemas import RawOpportunity
 from app.intelligence.provenance import observed_links
 from app.scanners.base import BaseScanner
+from app.scanners.pdf_text import extract_pdf_text
 
 
 class CompanyWebsiteScanner(BaseScanner):
@@ -672,6 +673,18 @@ class CompanyWebsiteScanner(BaseScanner):
             )
         ]
 
+        # A search engine may discover a publisher through a direct tender
+        # PDF, before its announcements section is indexed. Seed the scan
+        # with that same-domain notice rather than discarding the evidence.
+        search_document = self._normalise_url(source.discovered_from)
+        if (
+            search_document
+            and self._is_document_url(search_document)
+            and self._is_same_domain(search_document, base_domain)
+            and search_document != start_url
+        ):
+            queue.append((search_document, 0))
+
         base_url = self._normalise_url(
             source.base_url
         )
@@ -913,53 +926,43 @@ class CompanyWebsiteScanner(BaseScanner):
         organisation_name: str | None,
         source_name: str,
     ) -> RawOpportunity | None:
-
-        title = self._title_from_url(
-            url
-        )
-
+        title = self._title_from_url(url)
         if not title:
             return None
 
-        combined_text = (
-            self._clean_text(
-                f"{title} {url}"
-            )
-        )
+        # Extract the actual notice text. Filename-only records previously
+        # lost deadlines, scope and eligibility, especially for audit ToRs.
+        document_text = ""
+        if urlparse(url).path.lower().endswith(".pdf"):
+            try:
+                document_text = extract_pdf_text(self.session, url)
+            except requests.RequestException as exc:
+                print(
+                    f"  PDF download unavailable: {type(exc).__name__} "
+                    f"for {url[:250]}"
+                )
+            except Exception as exc:
+                print(f"  PDF text unavailable: {type(exc).__name__}")
 
-        if not self._looks_like_opportunity(
-            combined_text
-        ):
+        combined_text = self._clean_text(
+            f"{title} {url} {document_text}"
+        )
+        if not self._looks_like_opportunity(combined_text):
             return None
 
+        description = (
+            document_text
+            if document_text
+            else f"Potential opportunity document on {source_name}: {title}. "
+                 "The document text was not extractable; verify the original PDF."
+        )
         return RawOpportunity(
-            organisation_name=(
-                organisation_name
-                or source_name
-            ),
-
-            title=(
-                title[:500]
-            ),
-
-            source_name=(
-                source_name[:100]
-            ),
-
-            source_url=(
-                url
-            ),
-
-            description=(
-                "Opportunity document discovered on "
-                f"{source_name}: {title}"
-            ),
-
-            deadline=(
-                self._extract_deadline(
-                    combined_text
-                )
-            ),
+            organisation_name=organisation_name or source_name,
+            title=title[:500],
+            source_name=source_name[:100],
+            source_url=url,
+            description=description[: self.MAX_DESCRIPTION_LENGTH],
+            deadline=self._extract_deadline(combined_text),
         )
 
     def _extract_relevant_links(
