@@ -1,0 +1,56 @@
+name: Inspect database source failures (read-only)
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/inspect-source-failures.yml]
+permissions:
+  contents: read
+jobs:
+  read-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install 'psycopg[binary]>=3.2,<4'
+      - name: Aggregate source approval and error reasons, without changing records
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+          dsn = os.environ["DATABASE_URL"].replace("postgresql+psycopg://","postgresql://",1)
+          with psycopg.connect(dsn,connect_timeout=12,autocommit=False) as c:
+              with c.cursor() as cur:
+                  cur.execute("BEGIN TRANSACTION READ ONLY")
+                  cur.execute("""
+                      SELECT ai_status, is_active, count(*)
+                      FROM sources GROUP BY ai_status,is_active ORDER BY ai_status,is_active
+                  """)
+                  print("SOURCE_STATUS", cur.fetchall(),flush=True)
+                  cur.execute("""
+                      SELECT
+                        CASE
+                          WHEN ai_reason LIKE 'Gemini%' THEN 'AI_PROVIDER_ERROR'
+                          WHEN ai_reason LIKE 'Source content could not be fetched%' THEN
+                            'HTTP_OR_CONTENT_ERROR'
+                          WHEN ai_reason IS NULL THEN 'NO_REASON'
+                          ELSE 'OTHER_REASON'
+                        END, count(*)
+                      FROM sources WHERE ai_status='ERROR'
+                      GROUP BY 1 ORDER BY 2 DESC
+                  """)
+                  print("ERROR_GROUPS",cur.fetchall(),flush=True)
+                  cur.execute("""
+                      SELECT left(ai_reason,180), count(*)
+                      FROM sources WHERE ai_status='ERROR'
+                      GROUP BY 1 ORDER BY 2 DESC LIMIT 18
+                  """)
+                  print("ERROR_REASONS",cur.fetchall(),flush=True)
+          PY
