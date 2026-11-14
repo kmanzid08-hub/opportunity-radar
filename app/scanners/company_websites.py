@@ -383,62 +383,76 @@ class CompanyWebsiteScanner(BaseScanner):
         ] = {}
 
     def scan(self) -> list[RawOpportunity]:
-        sources = self._get_sources()
-        print(
-            f"Found {len(sources)} organisation websites due for scanning",
-            flush=True,
-        )
-
+        """Backward-compatible collector for direct/manual scanner calls."""
         opportunities: dict[str, RawOpportunity] = {}
-        try:
-            configured = int(os.getenv("WEBSITE_SCAN_WORKERS", "1"))
-        except ValueError:
-            configured = 1
-        workers = max(1, min(configured, 8, len(sources) or 1))
-
-        if workers == 1:
-            # Preserve deterministic local behaviour and existing test hooks.
-            for number, source in enumerate(sources, start=1):
-                for item in self._scan_one_source(source, number, len(sources)):
-                    opportunities[item.source_url] = item
-        else:
-            print(
-                f"Scanning {len(sources)} sources with {workers} "
-                "independent site crawlers",
-                flush=True,
-            )
-            # Every worker has its own requests.Session and robots cache.
-            # Database updates use separate short-lived SQLAlchemy sessions.
-            def scan_in_worker(source: Source, number: int) -> list[RawOpportunity]:
-                crawler = type(self)()
-                return crawler._scan_one_source(source, number, len(sources))
-
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                futures = {
-                    pool.submit(scan_in_worker, source, number): source
-                    for number, source in enumerate(sources, start=1)
-                }
-                for future in as_completed(futures):
-                    source = futures[future]
-                    try:
-                        listings = future.result()
-                    except Exception as exc:
-                        # Catch an unexpected worker-level error too.
-                        print(
-                            f"  Source worker failed for {source.domain}: "
-                            f"{type(exc).__name__}",
-                            flush=True,
-                        )
-                        continue
-                    for item in listings:
-                        opportunities[item.source_url] = item
-
+        for item in self.iter_opportunities():
+            opportunities[item.source_url] = item
         print(
             "\nCompany website scan completed: "
             f"{len(opportunities)} unique possible listings",
             flush=True,
         )
         return list(opportunities.values())
+
+    def iter_opportunities(self):
+        """Stream each completed website's listings to intelligence immediately.
+
+        Previously the entire fleet had to finish crawling before the first
+        opportunity could be verified and matched. A single stalled publisher
+        delayed all new leads in the Discover feed.
+        """
+        sources = self._get_sources()
+        print(
+            f"Found {len(sources)} organisation websites due for scanning",
+            flush=True,
+        )
+        try:
+            configured = int(os.getenv("WEBSITE_SCAN_WORKERS", "1"))
+        except ValueError:
+            configured = 1
+        workers = max(1, min(configured, 8, len(sources) or 1))
+        return self._iter_source_results(sources, workers)
+
+    def _iter_source_results(self, sources, workers):
+        seen_urls: set[str] = set()
+        if workers == 1:
+            for number, source in enumerate(sources, start=1):
+                for item in self._scan_one_source(source, number, len(sources)):
+                    if item.source_url not in seen_urls:
+                        seen_urls.add(item.source_url)
+                        yield item
+            return
+
+        print(
+            f"Scanning {len(sources)} sources with {workers} "
+            "independent site crawlers",
+            flush=True,
+        )
+
+        def scan_in_worker(source: Source, number: int) -> list[RawOpportunity]:
+            crawler = type(self)()
+            return crawler._scan_one_source(source, number, len(sources))
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(scan_in_worker, source, number): source
+                for number, source in enumerate(sources, start=1)
+            }
+            for future in as_completed(futures):
+                source = futures[future]
+                try:
+                    listings = future.result()
+                except Exception as exc:
+                    print(
+                        f"  Source worker failed for {source.domain}: "
+                        f"{type(exc).__name__}",
+                        flush=True,
+                    )
+                    continue
+                for item in listings:
+                    if item.source_url not in seen_urls:
+                        seen_urls.add(item.source_url)
+                        yield item
 
     def _scan_one_source(
         self, source: Source, source_number: int, source_total: int
