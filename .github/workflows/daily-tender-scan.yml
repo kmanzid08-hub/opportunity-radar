@@ -33,6 +33,9 @@ jobs:
       AUTOMATION_MODE: "scan"
       ENABLE_INTERNAL_SCHEDULER: "false"
       DAILY_SOURCE_SCAN: 'true'
+      WEBSITE_SCAN_WORKERS: '6'
+      WEBSITE_MAX_PAGES_PER_SOURCE: '12'
+      WEBSITE_CRAWL_BUDGET_SECONDS: '55'
       ENABLE_PDF_OCR: 'true'
       PDF_OCR_CACHE_PATH: '.cache/pdf_ocr_cache.json'
       FORCE_WEBSITE_DISCOVERY: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[run-scan]') }}
