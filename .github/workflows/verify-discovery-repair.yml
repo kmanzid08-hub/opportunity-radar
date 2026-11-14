@@ -1,4 +1,4 @@
-name: Verify publisher-first discovery and PDF repair
+name: Verify publisher recovery, PDFs and accurate error reporting
 on:
   push:
     branches: [main]
