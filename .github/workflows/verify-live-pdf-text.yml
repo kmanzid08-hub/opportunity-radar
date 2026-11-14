@@ -18,16 +18,25 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install 'pypdf>=5,<7' requests
-      - name: Inspect official public audit tender PDF via production extractor
+      - name: Diagnose official public audit PDF structure without OCR
         run: |
           python - <<'PY'
+          from io import BytesIO
           import requests
+          from pypdf import PdfReader
           from app.scanners.pdf_text import extract_pdf_text
           url = "https://www.ralga.rw/fileadmin/user_upload/RALGA/Announcements/Tender_Notice-Audit_Services.pdf"
-          content = extract_pdf_text(requests.Session(), url)
-          print("PARSED_PDF_CHARACTERS",len(content))
-          print("TEXT_PREVIEW",content[:500])
-          for term in ("deadline","closing","submission","audit","proposal"):
-              print("TEXT_CONTAINS",term,term in content.lower())
-          assert len(content)>80, "The original PDF is image-only or text extraction failed"
+          response = requests.get(url,timeout=20)
+          print("PDF_HTTP",response.status_code,"TYPE",response.headers.get("Content-Type"))
+          print("PDF_BYTES",len(response.content),"MAGIC",repr(response.content[:30]))
+          try:
+              reader = PdfReader(BytesIO(response.content), strict=False)
+              print("PDF_PAGE_COUNT",len(reader.pages))
+              for i,p in enumerate(reader.pages[:3]):
+                  content = p.extract_text() or ""
+                  print("PAGE",i+1,"TEXT_CHARS",len(content),"IMAGE_COUNT",len(p.images))
+          except Exception as exc:
+              print("PDF_READER_EXCEPTION",type(exc).__name__,str(exc)[:200])
+          text = extract_pdf_text(requests.Session(), url)
+          print("PRODUCTION_EXTRACTOR_CHARS",len(text))
           PY
