@@ -331,3 +331,61 @@ def test_permanent_forbidden_source_is_not_retried(
         analyzer=lambda **_: (_ for _ in ()).throw(AssertionError("Unexpected AI call")),
     )
     assert discovery._retry_failed_source_analyses(limit=2) == 0
+
+
+def test_image_only_pdf_uses_ocr_only_when_explicitly_enabled(monkeypatch):
+    class ImageOnlyResponse:
+        headers = {"Content-Type": "application/pdf"}
+        def raise_for_status(self):
+            return None
+        def iter_content(self, chunk_size):
+            yield b"%PDF-1.7\nimage-data"
+        def close(self):
+            return None
+    monkeypatch.setattr(pdf_text, "PdfReader", lambda *_args, **_kw:
+                        SimpleNamespace(pages=[SimpleNamespace(extract_text=lambda: "")]))
+    from app.scanners import pdf_ocr
+    calls = []
+    monkeypatch.setattr(
+        pdf_ocr, "ocr_image_only_pdf",
+        lambda pdf: calls.append(pdf) or "Submission deadline: 20 November 2026"
+    )
+    session = SimpleNamespace(get=lambda *_args, **_kw: ImageOnlyResponse())
+    monkeypatch.delenv("ENABLE_PDF_OCR", raising=False)
+    assert pdf_text.extract_pdf_text(session, RALGA_PDF) == ""
+    assert calls == []
+    monkeypatch.setenv("ENABLE_PDF_OCR", "true")
+    text = pdf_text.extract_pdf_text(session, RALGA_PDF)
+    assert "20 November 2026" in text
+    assert len(calls) == 1
+
+
+def test_ocr_result_is_reused_by_content_hash_without_repeating_ocr(monkeypatch, tmp_path):
+    from app.scanners import pdf_ocr
+    pdf = b"%PDF-1.7\n" + b"image-only-document"
+    monkeypatch.setenv("PDF_OCR_CACHE_PATH", str(tmp_path / "ocr-cache.json"))
+    monkeypatch.setattr(pdf_ocr.shutil, "which", lambda name: "/usr/bin/tesseract")
+    monkeypatch.setattr(pdf_ocr, "_uncached_ocr_count", 0)
+    calls = []
+    monkeypatch.setattr(
+        pdf_ocr, "_recognize",
+        lambda *_args, **_kwargs: calls.append(1) or "External audit tender 2026."
+    )
+    assert pdf_ocr.ocr_image_only_pdf(pdf) == "External audit tender 2026."
+    assert pdf_ocr.ocr_image_only_pdf(pdf) == "External audit tender 2026."
+    assert calls == [1]
+    assert (tmp_path / "ocr-cache.json").exists()
+
+
+def test_ocr_is_bounded_and_skips_large_files_or_missing_engine(monkeypatch):
+    from app.scanners import pdf_ocr
+    monkeypatch.delenv("PDF_OCR_CACHE_PATH", raising=False)
+    monkeypatch.setattr(pdf_ocr, "_uncached_ocr_count", 0)
+    monkeypatch.setattr(pdf_ocr.shutil, "which", lambda name: None)
+    assert pdf_ocr.ocr_image_only_pdf(b"%PDF-1.7\nsmall") == ""
+    monkeypatch.setattr(pdf_ocr.shutil, "which", lambda name: "/usr/bin/tesseract")
+    monkeypatch.setattr(pdf_ocr, "_uncached_ocr_count", pdf_ocr.MAX_UNCACHED_DOCS_PER_RUN)
+    assert pdf_ocr.ocr_image_only_pdf(b"%PDF-1.7\nsecond") == ""
+    assert pdf_ocr.ocr_image_only_pdf(
+        b"%PDF-1.7\n" + b"x" * (pdf_ocr.MAX_OCR_PDF_BYTES + 1)
+    ) == ""
