@@ -36,6 +36,7 @@ jobs:
       OPENAI_FALLBACK_ENABLED: ${{ vars.OPENAI_FALLBACK_ENABLED || 'true' }}
       OPENAI_FALLBACK_MODEL: ${{ vars.OPENAI_FALLBACK_MODEL || 'gpt-5-mini' }}
       ENABLE_INTERNAL_SCHEDULER: 'false'
+      DAILY_SOURCE_SCAN: 'true'
       DISCOVERY_COUNTRY: Rwanda
       AUTOMATION_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || (github.event.schedule == '20 2 */5 * *' && 'all' || 'scan') }}
     steps:
