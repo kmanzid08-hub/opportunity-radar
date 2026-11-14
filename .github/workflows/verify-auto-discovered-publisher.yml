@@ -1,0 +1,42 @@
+name: Verify publishers saved automatically (read-only)
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/verify-auto-discovered-publisher.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install 'psycopg[binary]>=3.2,<4'
+      - name: Inspect latest saved source records and RALGA (no writes)
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+          dsn=os.environ["DATABASE_URL"].replace("postgresql+psycopg://","postgresql://",1)
+          with psycopg.connect(dsn,connect_timeout=12,autocommit=False) as c:
+              with c.cursor() as cur:
+                  cur.execute("BEGIN TRANSACTION READ ONLY")
+                  cur.execute("SELECT count(*) FROM sources")
+                  print("TOTAL_SOURCES",cur.fetchone()[0],flush=True)
+                  cur.execute("SELECT count(*) FROM sources WHERE is_active=true AND is_approved=true")
+                  print("ACTIVE_APPROVED_SOURCES",cur.fetchone()[0],flush=True)
+                  cur.execute("""
+                    SELECT id,monitor_url,domain,ai_status,is_active,is_approved,left(ai_reason,200)
+                    FROM sources WHERE domain ILIKE '%ralga%' OR monitor_url ILIKE '%ralga%'
+                    ORDER BY id
+                  """)
+                  print("RALGA_RECORDS",cur.fetchall(),flush=True)
+          PY
