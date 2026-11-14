@@ -41,11 +41,20 @@ jobs:
                      FROM sources""")
                   print("COVERAGE",dict(c.fetchone()),flush=True)
                   c.execute("""SELECT id,domain,monitor_url,ai_status,is_active,is_approved,
-                     first_discovered_at FROM sources
+                     first_discovered_at,last_scanned_at,last_successful_scan_at,
+                     total_opportunities_found FROM sources
                      WHERE lower(domain) LIKE '%ralga%' OR lower(coalesce(organisation_name,'')) LIKE '%ralga%'
                      ORDER BY id""")
                   print("RALGA_ROWS",c.fetchall(),flush=True)
                   c.execute("""SELECT COUNT(*) AS opportunity_count FROM opportunities""")
                   print("OPPORTUNITIES",dict(c.fetchone()),flush=True)
+                  c.execute("""SELECT COUNT(*) AS scanned_since_previous_run
+                    FROM sources WHERE last_scan_started_at >= '2026-11-14 18:58:00+00'""")
+                  print("CURRENT_SCAN_PROGRESS",dict(c.fetchone()),flush=True)
+                  c.execute("""SELECT id,title,source_url,deadline FROM opportunities
+                    WHERE lower(coalesce(organisation_name,'')) LIKE '%ralga%'
+                    OR lower(coalesce(source_url,'')) LIKE '%ralga%'
+                    ORDER BY id DESC LIMIT 10""")
+                  print("RALGA_OPPORTUNITIES",c.fetchall(),flush=True)
           print("VERIFIED_AT_UTC",datetime.now(timezone.utc).isoformat(),flush=True)
           PY
