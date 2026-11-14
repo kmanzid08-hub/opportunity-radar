@@ -10,7 +10,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 
 import requests
 from bs4 import BeautifulSoup, Tag
-from sqlalchemy import select
+from sqlalchemy import case, select
 
 from app.database import SessionLocal
 from app.models import Source
@@ -606,6 +606,9 @@ class CompanyWebsiteScanner(BaseScanner):
                     ),
                 )
                 .order_by(
+                    # First-time crawls must not be delayed by a low
+                    # initial website discovery confidence score.
+                    case((Source.last_scanned_at.is_(None), 0), else_=1).asc(),
                     Source.priority_score.desc(),
                     Source.confidence_score.desc(),
                     Source.organisation_name.asc(),
