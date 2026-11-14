@@ -30,7 +30,7 @@ from app.source_quality import SourceQualityEvaluator
 from app.source_fetch_diagnostics import SourceFetchError, report_fetch_failure
 
 import requests
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app.database import SessionLocal
 from app.models import Source
@@ -274,18 +274,26 @@ class SourceDiscovery:
             print(f"Discovery diagnostic export unavailable: {type(exc).__name__}")
 
     def _retry_failed_source_analyses(self, limit: int = 12) -> int:
-        """Reconsider a bounded set of older AI errors without Brave searches.
+        """Retry only recoverable site-access or AI errors, never blocked sites.
 
-        On quota/temporary AI failures a valid site was already retained in
-        the database but was inactive. Retrying avoids depending on Brave
-        ranking the same source again. Permanent 403/invalid pages are skipped.
+        A discovered site remains in the database after a transient timeout,
+        network/DNS failure, HTTP 5xx or temporary AI failure. Permanent 403,
+        404 and rate-limit responses are deliberately not retried here.
         """
         with SessionLocal() as db:
             rows = db.scalars(
                 select(Source)
                 .where(
                     Source.ai_status == "ERROR",
-                    Source.ai_reason.like("Gemini%"),
+                    or_(
+                        Source.ai_reason.like("Gemini%"),
+                        Source.ai_reason.like("%category=TIMEOUT%"),
+                        Source.ai_reason.like("%category=DNS_NETWORK_ERROR%"),
+                        Source.ai_reason.like("%http_status=500%"),
+                        Source.ai_reason.like("%http_status=502%"),
+                        Source.ai_reason.like("%http_status=503%"),
+                        Source.ai_reason.like("%http_status=504%"),
+                    ),
                     Source.is_auto_disabled.is_(False),
                 )
                 .order_by(Source.ai_analyzed_at.asc(), Source.id.asc())
@@ -347,6 +355,7 @@ class SourceDiscovery:
         rejected_results = 0
         review_results = 0
         ai_failures = 0
+        content_fetch_failures = 0
         accepted_sources = 0
         failed_queries = 0
         queries_executed = 0
@@ -546,7 +555,15 @@ class SourceDiscovery:
                             query_rejected += 1
                             category_stats.rejected += 1
                         else:
-                            ai_failures += 1
+                            if (
+                                outcome.reason
+                                and outcome.reason.startswith(
+                                    "Source content could not be fetched"
+                                )
+                            ):
+                                content_fetch_failures += 1
+                            else:
+                                ai_failures += 1
 
                         if not outcome.created and outcome.status != "DOMAIN_CAP":
                             existing_sources += 1
@@ -607,7 +624,8 @@ class SourceDiscovery:
         print(f"New sources:                   {added_sources}")
         print(f"AI accepted:                   {accepted_sources}")
         print(f"AI review:                     {review_results}")
-        print(f"AI failures:                   {ai_failures}")
+        print(f"AI evaluation failures:        {ai_failures}")
+        print(f"Website-fetch failures:        {content_fetch_failures}")
         print(f"Duplicates:                    {existing_sources}")
         print(f"Rejected:                      {rejected_results}")
         print(f"Failed queries:                {failed_queries}")
@@ -638,6 +656,7 @@ class SourceDiscovery:
             "rejected_results": rejected_results,
             "review_results": review_results,
             "ai_failures": ai_failures,
+            "content_fetch_failures": content_fetch_failures,
             "failed_queries": failed_queries,
             "configured_delay_seconds": (
                 configured_delay_seconds
