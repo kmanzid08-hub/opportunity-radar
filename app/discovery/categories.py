@@ -258,6 +258,44 @@ DISCOVERY_CATEGORIES: tuple[
         tags=("private", "procurement"),
     ),
 
+    # Organization-first discovery: establish the official publisher before
+    # looking for tenders. These queries target institutions often absent from
+    # the top 20 generic tender search results. No individual organization is
+    # hard-coded into the source list.
+    DiscoveryCategory(
+        name="Local government and membership associations",
+        query_templates=(
+            '"{country}" "local government association" official website',
+            '"{country}" association of local government authorities',
+            '"{country}" national associations federations official website',
+        ),
+        tags=("government", "ngo", "procurement"),
+    ),
+    DiscoveryCategory(
+        name="Civil society and nonprofit organizations",
+        query_templates=(
+            '"{country}" civil society network umbrella organizations official websites',
+            '"{country}" community development associations foundations official website',
+        ),
+        tags=("ngo", "development"),
+    ),
+    DiscoveryCategory(
+        name="Districts and decentralized public institutions",
+        query_templates=(
+            '"{country}" district local government institutions official websites',
+            '"{country}" decentralized entities agencies procurement notices',
+        ),
+        tags=("government", "procurement"),
+    ),
+    DiscoveryCategory(
+        name="Professional associations and sector federations",
+        query_templates=(
+            '"{country}" professional associations sector federations official website',
+            '"{country}" cooperative SACCO microfinance umbrella institutions tender',
+        ),
+        tags=("private", "procurement"),
+    ),
+
     DiscoveryCategory(
         name="Private sector procurement",
         query_templates=(
