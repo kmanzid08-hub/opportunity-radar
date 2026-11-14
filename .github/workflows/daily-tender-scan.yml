@@ -5,23 +5,40 @@ on:
     - cron: "0 4 * * *"
       timezone: "Africa/Kigali"
   workflow_dispatch:
+  # Permit a tagged workflow-file commit to scan saved sources and match both active companies.
+  # Ordinary code pushes do not start extra production scans.
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/daily-tender-scan.yml
 
 concurrency:
-  group: opportunity-radar-tender-scan
+  group: opportunity-radar-data-pipeline
   cancel-in-progress: false
 
 jobs:
   scan:
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[run-scan]')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_FALLBACK_ENABLED: ${{ vars.OPENAI_FALLBACK_ENABLED || 'true' }}
+      OPENAI_FALLBACK_MODEL: ${{ vars.OPENAI_FALLBACK_MODEL || 'gpt-5-mini' }}
+      AUTOMATION_MODE: "scan"
       ENABLE_INTERNAL_SCHEDULER: "false"
+      DAILY_SOURCE_SCAN: 'true'
 
     steps:
-      - name: Check out repository
+      - name: Check out AI-enabled application
         uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -32,5 +49,16 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run tender scanner
-        run: python -m app.scanner
+      - name: Verify AI matching credentials
+        shell: bash
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::DATABASE_URL and GEMINI_API_KEY must be configured as repository Actions secrets."
+            exit 1
+          fi
+
+      - name: Scan and qualify opportunities with AI
+        run: python -m app.automation_run
+
+      - name: Match existing verified notices to new business profiles
+        run: python -m app.backfill_matches
