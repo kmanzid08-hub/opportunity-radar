@@ -1,7 +1,7 @@
 name: Website discovery
 
 on:
-  # Discover and retain newly found websites every Rwanda calendar day.
+  # Discover and retain newly found websites every Rwanda calendar day; monitor publisher announcements and PDF notices.
   # The Python job keeps durable last-success state to avoid duplicate runs.
   schedule:
     - cron: "20 4 * * *"
