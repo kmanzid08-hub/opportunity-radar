@@ -1,0 +1,60 @@
+name: Verify live publisher discovery decisions (read-only)
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/verify-live-publisher-classification.yml]
+permissions:
+  contents: read
+jobs:
+  source-ai:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_FALLBACK_ENABLED: 'true'
+      OPENAI_FALLBACK_MODEL: gpt-5-mini
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Verify publisher's public homepage and AI classification without saving it
+        run: |
+          python - <<'PY'
+          from app.discovery.categories import DISCOVERY_CATEGORIES
+          from app.source_discovery import SourceDiscovery, SearchResult
+          from app.intelligence.source_analyzer import analyze_source
+          url="https://www.ralga.rw/"
+          d=SourceDiscovery(country="Rwanda")
+          cat=next(c for c in DISCOVERY_CATEGORIES if c.name=="Local government and membership associations")
+          candidate=d._build_candidate(SearchResult(
+              title="RALGA - Rwanda Association of Local Government Authorities",
+              url=url, description="Official Rwandan local government association",
+          ), cat.queries_for("Rwanda")[1], cat)
+          print("CANDIDATE_URL",candidate["monitor_url"])
+          content=d._fetch_source_content(url)
+          print("PUBLICATION_EVIDENCE",[
+              term for term in ("media/announcements", "Tender_Notice", "ToRs")
+              if term.lower() in content.lower()
+          ])
+          a=analyze_source(
+              url=candidate["monitor_url"],
+              page_content=(
+                  f"Page title: {candidate['page_title']}\n"
+                  f"Search description: {candidate['description']}\n"
+                  f"Website content and publisher document evidence:\n{content}"
+              ),
+              source_name_hint=str(candidate["organisation_name"]),
+              country_hint="Rwanda",
+          )
+          print("AI_DECISION",a.decision.value,"CONFIDENCE",a.confidence)
+          print("AI_REASON",a.reason[:450])
+          print("SOURCE_ROLE",a.source_role.value)
+          assert a.decision.value=="ACCEPT", "An official tender-publishing association should be accepted"
+          PY
