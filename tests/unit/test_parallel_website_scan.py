@@ -63,7 +63,7 @@ def test_robots_rules_use_bounded_http_timeout_and_are_cached(monkeypatch):
     class FakeResponse:
         status_code=200
         def __init__(self):
-            self.raw=FakeRaw(b"User-agent: *\\nDisallow: /private\\n")
+            self.raw=FakeRaw(b"User-agent: *\nDisallow: /private\n")
         def __enter__(self):
             return self
         def __exit__(self, *args):
