@@ -400,7 +400,12 @@ def run_scanner() -> None:
         print(f"\nScanning {scanner_name}...")
 
         try:
-            raw_opportunities = source_scanner.scan()
+            # Stream each publisher's notices to AI matching as soon as that
+            # website completes, without waiting for the entire source fleet.
+            if isinstance(source_scanner, CompanyWebsiteScanner):
+                raw_opportunities = source_scanner.iter_opportunities()
+            else:
+                raw_opportunities = source_scanner.scan()
         except Exception as exc:
             total_scan_failures += 1
 
@@ -410,15 +415,12 @@ def run_scanner() -> None:
             )
             continue
 
-        source_total = len(raw_opportunities)
+        source_total = 0
         source_relevant = 0
         source_saved = 0
 
-        total_found += source_total
-
-        print(f"Found {source_total} possible listings")
-
         for raw_opportunity in raw_opportunities:
+            source_total += 1
             try:
                 intelligence = process_opportunity_candidate(
                     raw_opportunity,
@@ -545,6 +547,8 @@ def run_scanner() -> None:
                 f"{filtered.match_score}"
             )
 
+        total_found += source_total
+        print(f"Found {source_total} possible listings")
         print(f"\n{scanner_name} summary:")
         print(f"  Possible listings: {source_total}")
         print(f"  Relevant listings: {source_relevant}")
