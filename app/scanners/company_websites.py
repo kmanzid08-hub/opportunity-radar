@@ -265,15 +265,15 @@ class CompanyWebsiteScanner(BaseScanner):
         # Common language in official procurement PDFs and scanned notices.
         # E.g. "shall be submitted ... no later than 12 November 2026".
         re.compile(
-            r"\\b(?:no later than|not later than|on or before|"
-            r"submitted by|received by|submit by)\\s+"
-            r"(\\d{1,2}(?:st|nd|rd|th)?\\s+[A-Za-z]+\\s+\\d{4})",
+            r"\b(?:no later than|not later than|on or before|"
+            r"submitted by|received by|submit by)\s+"
+            r"(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4})",
             re.IGNORECASE,
         ),
         re.compile(
-            r"\\b(?:no later than|not later than|on or before|"
-            r"submitted by|received by|submit by)\\s+"
-            r"(\\d{1,2}[-/.]\\d{1,2}[-/.]\\d{4})",
+            r"\b(?:no later than|not later than|on or before|"
+            r"submitted by|received by|submit by)\s+"
+            r"(\d{1,2}[-/.]\d{1,2}[-/.]\d{4})",
             re.IGNORECASE,
         ),
         re.compile(
