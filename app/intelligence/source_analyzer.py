@@ -18,9 +18,13 @@ SOURCE_SYSTEM_INSTRUCTION = dedent(
     tender, consultancy, procurement, audit, grant, and jobs must never by
     themselves cause acceptance.
 
-    ACCEPT official government, NGO, donor, company, university, or
-    international-organisation pages that genuinely publish actionable
-    opportunities. REJECT paid/subscription tender aggregators, generic
+    ACCEPT official government, local authority, association, NGO, donor,
+    company, university, or international-organisation websites when evidence
+    shows they publish actionable opportunities. Evidence may be a dedicated
+    announcements/notices/procurement page, a same-domain tender document link,
+    or actual recent calls. Do not require an open tender on the homepage today:
+    a verified publishing organization remains useful for daily monitoring.
+    Prefer the publisher's own website over third-party reposts. REJECT paid/subscription tender aggregators, generic
     recruitment directories, generic directories, search-result pages,
     SEO/content pages, marketing/service sites, training sites, and news/blog
     sites. A recruitment portal is not automatically unsuitable: accept or
