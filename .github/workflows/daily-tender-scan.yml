@@ -56,7 +56,7 @@ jobs:
         shell: bash
         run: |
           if ! command -v tesseract >/dev/null 2>&1; then
-            sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr || echo "OCR engine unavailable; scanning still continues"
+            timeout 90s bash -c 'export DEBIAN_FRONTEND=noninteractive; sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr' || echo "OCR engine unavailable; scanning still continues"
           fi
           if command -v tesseract >/dev/null 2>&1; then tesseract --version | head -n 1; fi
 
