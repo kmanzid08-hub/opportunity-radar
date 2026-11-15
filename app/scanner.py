@@ -399,16 +399,40 @@ def run_scanner() -> None:
 
         print(f"\nScanning {scanner_name}...")
 
+        source_processing = {"failed": False}
         try:
-            # Stream each publisher's notices to AI matching as soon as that
-            # website completes, without waiting for the entire source fleet.
-            if isinstance(source_scanner, CompanyWebsiteScanner):
+            # A source is not acknowledged until its AI and database work
+            # finishes. Older iterator overrides remain compatible.
+            if (
+                isinstance(source_scanner, CompanyWebsiteScanner)
+                and type(source_scanner).iter_opportunities
+                is CompanyWebsiteScanner.iter_opportunities
+            ):
+                def completed_site_listings():
+                    seen_urls: set[str] = set()
+                    for batch in source_scanner.iter_source_batches():
+                        if not batch.crawl_succeeded:
+                            continue
+                        source_processing["failed"] = False
+                        for item in batch.listings:
+                            if item.source_url not in seen_urls:
+                                seen_urls.add(item.source_url)
+                                yield item
+                        if source_processing["failed"]:
+                            print(
+                                "  Source processing incomplete; retry next run: "
+                                f"{batch.source_name}",
+                                flush=True,
+                            )
+                        else:
+                            source_scanner.acknowledge_source(batch)
+                raw_opportunities = completed_site_listings()
+            elif isinstance(source_scanner, CompanyWebsiteScanner):
                 raw_opportunities = source_scanner.iter_opportunities()
             else:
                 raw_opportunities = source_scanner.scan()
         except Exception as exc:
             total_scan_failures += 1
-
             print(
                 f"Scan failed for {scanner_name}: "
                 f"{type(exc).__name__}: {exc}"
@@ -428,6 +452,7 @@ def run_scanner() -> None:
                 )
             except Exception as exc:
                 total_classification_failures += 1
+                source_processing["failed"] = True
 
                 print(
                     "  Classification failed for: "
@@ -440,6 +465,7 @@ def run_scanner() -> None:
 
             if intelligence.status is OpportunityProcessingStatus.ERROR:
                 total_classification_failures += 1
+                source_processing["failed"] = True
                 print(
                     "  Gemini analysis unavailable for: "
                     f"{raw_opportunity.title[:80]}"
@@ -467,9 +493,12 @@ def run_scanner() -> None:
                         company_profiles,
                     )
                     total_matching_failures += failures
+                    if failures:
+                        source_processing["failed"] = True
                     total_qualifying_matches += qualifying
                 except Exception as exc:
                     total_matching_failures += 1
+                    source_processing["failed"] = True
                     print(
                         "  Company matching failed for existing opportunity: "
                         f"{type(exc).__name__}: {exc}"
@@ -483,6 +512,7 @@ def run_scanner() -> None:
             filtered = intelligence.filtered_opportunity
             if filtered is None:
                 total_classification_failures += 1
+                source_processing["failed"] = True
                 continue
 
             try:
@@ -492,6 +522,7 @@ def run_scanner() -> None:
                 )
             except Exception as exc:
                 total_save_failures += 1
+                source_processing["failed"] = True
 
                 print(
                     "  Save failed for: "
@@ -509,9 +540,12 @@ def run_scanner() -> None:
                         company_profiles,
                     )
                     total_matching_failures += failures
+                    if failures:
+                        source_processing["failed"] = True
                     total_qualifying_matches += qualifying
                 except Exception as exc:
                     total_matching_failures += 1
+                    source_processing["failed"] = True
                     print(
                         "  Company matching failed for: "
                         f"{filtered.title[:80]}"
