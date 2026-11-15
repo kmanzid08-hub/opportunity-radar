@@ -602,3 +602,100 @@ def test_only_admin_can_add_shared_sources_without_network_or_ai(beta):
         assert len(sources) == 1
         assert sources[0].source_role == "UNKNOWN"
     assert not calls
+
+
+def test_workspace_admin_invites_colleague_who_sets_their_own_password(beta):
+    from app import main
+
+    owner, other, _, factory = beta
+    sign_in(owner)
+    with factory() as db:
+        db.get(BetaUser, 1).is_admin = True
+        db.commit()
+
+    assert "Team members" in owner.get("/settings").text
+    assert "Team members" not in other.get("/settings").text if other.cookies.get(SESSION_COOKIE) else True
+
+    invited = post(owner, "/settings/team/invite", email="Teammate@Example.Test")
+    assert invited.status_code == 200
+    assert "Account created" in invited.text
+    token_match = re.search(r"<code[^>]*>([^<]+)</code>", invited.text)
+    assert token_match is not None
+    token = token_match.group(1)
+
+    with factory() as db:
+        member = db.scalar(select(BetaUser).where(BetaUser.email == "teammate@example.test"))
+        assert member is not None
+        assert member.workspace_id == 1
+        assert member.is_admin is False
+        assert member.password_hash is None
+        assert member.invite_hash == digest(token)
+        member_id = member.id
+
+    duplicate = post(owner, "/settings/team/invite", email="teammate@example.test")
+    assert duplicate.status_code == 200
+    assert "already has an account" in duplicate.text
+    with factory() as db:
+        assert len(list(db.scalars(
+            select(BetaUser).where(BetaUser.email == "teammate@example.test")
+        ))) == 1
+
+    with TestClient(main.app, follow_redirects=False) as teammate:
+        assert post(
+            teammate, "/login", email="teammate@example.test",
+            password="wrong password"
+        ).status_code == 200
+        activated = post(
+            teammate, "/accept-invite",
+            token=token, password="a very long teammate password"
+        )
+        assert activated.status_code == 303
+        assert teammate.get("/settings").status_code == 200
+        assert "teammate@example.test" in teammate.get("/settings").text
+        assert "Team members" not in teammate.get("/settings").text
+        assert post(teammate, "/settings/team/invite",
+                    email="intruder@example.test").status_code == 403
+        assert post(teammate, "/settings/team/deactivate", user_id=1).status_code == 403
+        assert "invalid or expired" in post(
+            other, "/accept-invite", token=token,
+            password="another long teammate password",
+        ).text
+
+        assert post(owner, "/settings/team/deactivate", user_id=member_id).status_code == 303
+        assert teammate.get("/settings").headers["location"] == "/login"
+        assert post(
+            teammate, "/login", email="teammate@example.test",
+            password="a very long teammate password"
+        ).status_code == 200
+
+    with factory() as db:
+        member = db.get(BetaUser, member_id)
+        assert member.is_active is False
+        assert member.password_hash != "a very long teammate password"
+
+    reset = post(owner, "/settings/team/reinvite", user_id=member_id)
+    assert reset.status_code == 200
+    assert "Previous credentials revoked" in reset.text
+    assert token not in reset.text
+    with factory() as db:
+        restored = db.get(BetaUser, member_id)
+        assert restored.is_active is True
+        assert restored.password_hash is None
+
+
+def test_team_admin_cannot_manage_other_workspace_members(beta):
+    owner, other, _, factory = beta
+    sign_in(owner)
+    sign_in(other)
+    with factory() as db:
+        db.get(BetaUser, 1).is_admin = True
+        db.get(BetaUser, 2).is_admin = True
+        db.commit()
+    assert "owner2@example.test" not in owner.get("/settings").text
+    assert post(owner, "/settings/team/deactivate", user_id=2).status_code == 404
+    assert post(owner, "/settings/team/reinvite", user_id=2).status_code == 404
+    assert post(owner, "/settings/team/deactivate", user_id=1).status_code == 403
+    assert post(owner, "/settings/team/invite", email="not-an-address").status_code == 200
+    with factory() as db:
+        assert db.get(BetaUser, 2).is_active is True
+        assert not list(db.scalars(select(BetaUser).where(BetaUser.email == "not-an-address")))
