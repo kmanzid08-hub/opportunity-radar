@@ -31,7 +31,7 @@ jobs:
           print('Templates compiled successfully')
           PY
       - name: Security and invite regression tests
-        run: python -m pytest -q tests/routes/test_private_beta.py tests/unit/test_beta_security.py tests/unit/test_csrf_cookie_stability.py
+        run: python -m pytest -q tests/routes/test_private_beta.py tests/unit/test_beta_security.py tests/test_csrf_cookie_stability.py
       - name: Baseline-clean broad regression suite
         run: |
           python -m pytest -q \
