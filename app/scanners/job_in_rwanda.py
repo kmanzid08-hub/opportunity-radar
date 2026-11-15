@@ -169,11 +169,14 @@ class JobInRwandaScanner(BaseScanner):
         )
 
     def scan(self) -> list[RawOpportunity]:
-        """
-        Scan all configured Job in Rwanda sections.
+        """Compatibility collector; production consumes the iterator directly."""
+        return list(self.iter_opportunities())
 
-        Returns:
-            Deduplicated raw opportunities.
+    def iter_opportunities(self):
+        """Yield each completed listing immediately for AI evaluation.
+
+        Listing-index pages must first be deduplicated across sections, but
+        detail pages never need to be buffered before downstream persistence.
         """
         print(f"Scanning {self.source_name}...")
 
@@ -212,7 +215,7 @@ class JobInRwandaScanner(BaseScanner):
             "listing URLs across all sections"
         )
 
-        opportunities: list[RawOpportunity] = []
+        extracted = 0
         total = len(discovered_listings)
 
         for number, (listing_url, preview) in enumerate(
@@ -235,16 +238,16 @@ class JobInRwandaScanner(BaseScanner):
             )
 
             if opportunity is not None:
-                opportunities.append(opportunity)
+                extracted += 1
+                yield opportunity
 
             self._wait_between_requests()
 
         print(
             f"Completed {self.source_name}: "
-            f"{len(opportunities)} opportunities extracted"
+            f"{extracted} opportunities extracted"
         )
 
-        return opportunities
 
     def _discover_section_listings(
         self,
