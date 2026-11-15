@@ -427,7 +427,7 @@ def run_scanner() -> None:
                         else:
                             source_scanner.acknowledge_source(batch)
                 raw_opportunities = completed_site_listings()
-            elif isinstance(source_scanner, CompanyWebsiteScanner):
+            elif isinstance(source_scanner, (CompanyWebsiteScanner, JobInRwandaScanner)):
                 raw_opportunities = source_scanner.iter_opportunities()
             else:
                 raw_opportunities = source_scanner.scan()
