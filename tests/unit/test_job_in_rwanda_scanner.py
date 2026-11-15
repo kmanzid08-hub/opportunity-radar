@@ -130,3 +130,29 @@ def test_preview_without_title_is_rejected() -> None:
             "organisation_name": "",
         },
     ) is None
+
+
+def test_listing_iterator_yields_before_later_detail_page_is_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    crawler = JobInRwandaScanner()
+    monkeypatch.setattr(crawler, "SECTION_URLS", ("https://www.jobinrwanda.com/jobs/tender",))
+    monkeypatch.setattr(crawler, "MAX_PAGES_PER_SECTION", 1)
+    monkeypatch.setattr(crawler, "_wait_between_requests", lambda: None)
+    visited: list[str] = []
+
+    def local_soup(url: str) -> BeautifulSoup:
+        visited.append(url)
+        if "/jobs/tender" in url:
+            return _soup("listings.html")
+        if url.endswith("/job/external-audit"):
+            return _soup("detail_valid.html")
+        return _soup("detail_minimal.html")
+
+    monkeypatch.setattr(crawler, "_get_soup", local_soup)
+    results = crawler.iter_opportunities()
+    first = next(results)
+    assert first.source_url.endswith("/job/external-audit")
+    assert not any(url.endswith("/job/grant-advisory-consultancy") for url in visited)
+    second = next(results)
+    assert second.source_url.endswith("/job/grant-advisory-consultancy")
