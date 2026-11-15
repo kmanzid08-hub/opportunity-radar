@@ -1500,7 +1500,7 @@ class CompanyWebsiteScanner(BaseScanner):
     def _record_scan_started(
         self,
         source_id: int,
-    ) -> None:
+    ) -> datetime:
 
         now = datetime.now(
             timezone.utc
@@ -1513,17 +1513,12 @@ class CompanyWebsiteScanner(BaseScanner):
             )
 
             if source is None:
-                return
+                return now
 
-            source.last_scan_started_at = (
-                now
-            )
-
-            source.last_scanned_at = (
-                now
-            )
-
+            # Starting a crawl is not a completed AI-processed scan.
+            source.last_scan_started_at = now
             db.commit()
+        return now
 
     def _record_scan_success(
         self,
@@ -1531,6 +1526,7 @@ class CompanyWebsiteScanner(BaseScanner):
         source_id: int,
         duration_seconds: float,
         opportunities_found: int,
+        expected_started_at: datetime | None = None,
     ) -> None:
 
         now = datetime.now(
@@ -1545,6 +1541,25 @@ class CompanyWebsiteScanner(BaseScanner):
 
             if source is None:
                 return
+
+            if expected_started_at is not None:
+                # Prevent duplicate or out-of-order scan acknowledgements.
+                started = source.last_scan_started_at
+                if started is None:
+                    return
+                if started.tzinfo is None:
+                    started = started.replace(tzinfo=timezone.utc)
+                expected = expected_started_at
+                if expected.tzinfo is None:
+                    expected = expected.replace(tzinfo=timezone.utc)
+                if started != expected:
+                    return
+                last_success = source.last_successful_scan_at
+                if last_success is not None:
+                    if last_success.tzinfo is None:
+                        last_success = last_success.replace(tzinfo=timezone.utc)
+                    if last_success >= started:
+                        return
 
             source.last_scanned_at = (
                 now
