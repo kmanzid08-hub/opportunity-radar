@@ -3,7 +3,9 @@ from __future__ import annotations
 import os
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections.abc import Iterator
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from urllib import robotparser
@@ -19,6 +21,18 @@ from app.schemas import RawOpportunity
 from app.intelligence.provenance import observed_links
 from app.scanners.base import BaseScanner
 from app.scanners.pdf_text import extract_pdf_text
+
+
+@dataclass(frozen=True, slots=True)
+class SourceScanBatch:
+    """One finished crawl whose listings are not yet acknowledged."""
+
+    source_id: int
+    source_name: str
+    listings: tuple[RawOpportunity, ...]
+    duration_seconds: float
+    started_at: datetime
+    crawl_succeeded: bool
 
 
 class CompanyWebsiteScanner(BaseScanner):
@@ -394,108 +408,138 @@ class CompanyWebsiteScanner(BaseScanner):
         )
         return list(opportunities.values())
 
-    def iter_opportunities(self):
-        """Stream each completed website's listings to intelligence immediately.
+    def iter_opportunities(self) -> Iterator[RawOpportunity]:
+        """Legacy collector. Production uses acknowledged site batches."""
+        seen_urls: set[str] = set()
+        for batch in self.iter_source_batches():
+            if not batch.crawl_succeeded:
+                continue
+            self.acknowledge_source(batch)
+            for item in batch.listings:
+                if item.source_url not in seen_urls:
+                    seen_urls.add(item.source_url)
+                    yield item
 
-        Previously the entire fleet had to finish crawling before the first
-        opportunity could be verified and matched. A single stalled publisher
-        delayed all new leads in the Discover feed.
+    def iter_source_batches(self) -> Iterator[SourceScanBatch]:
+        """Yield completed sites; the caller acknowledges them after AI work.
+
+        An interrupted run leaves last_scanned_at unchanged so the site is due
+        again next time. Already-processed notices use existing AI/URL caches.
         """
         sources = self._get_sources()
-        print(
-            f"Found {len(sources)} organisation websites due for scanning",
-            flush=True,
-        )
+        print(f"Found {len(sources)} organisation websites due for scanning", flush=True)
         try:
             configured = int(os.getenv("WEBSITE_SCAN_WORKERS", "1"))
         except ValueError:
             configured = 1
         workers = max(1, min(configured, 8, len(sources) or 1))
-        return self._iter_source_results(sources, workers)
+        yield from self._iter_source_batches(sources, workers)
 
-    def _iter_source_results(self, sources, workers):
-        seen_urls: set[str] = set()
+    def _iter_source_batches(
+        self, sources: list[Source], workers: int
+    ) -> Iterator[SourceScanBatch]:
+        total = len(sources)
         if workers == 1:
             for number, source in enumerate(sources, start=1):
-                for item in self._scan_one_source(source, number, len(sources)):
-                    if item.source_url not in seen_urls:
-                        seen_urls.add(item.source_url)
-                        yield item
+                yield self._crawl_source(source, number, total)
             return
 
+        print(f"Scanning {total} sources with {workers} independent site crawlers", flush=True)
+
+        def scan_in_worker(source: Source, number: int) -> SourceScanBatch:
+            # Requests sessions must never be shared by worker threads.
+            return type(self)()._crawl_source(source, number, total)
+
+        remaining = iter(enumerate(sources, start=1))
+        # Submit no more than twice the worker count: AI can be much slower
+        # than crawling, and hundreds of buffered notices waste memory.
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            in_flight: dict[Future[SourceScanBatch], Source] = {}
+
+            def submit_next() -> None:
+                item = next(remaining, None)
+                if item is not None:
+                    number, source = item
+                    in_flight[pool.submit(scan_in_worker, source, number)] = source
+
+            for _ in range(min(total, workers * 2)):
+                submit_next()
+            while in_flight:
+                done, _ = wait(tuple(in_flight), return_when=FIRST_COMPLETED)
+                for future in done:
+                    source = in_flight.pop(future)
+                    try:
+                        batch = future.result()
+                    except Exception as exc:
+                        print(
+                            f"  Source worker failed for {source.domain}: "
+                            f"{type(exc).__name__}: {exc}", flush=True
+                        )
+                        batch = SourceScanBatch(
+                            source_id=source.id,
+                            source_name=source.organisation_name or source.domain,
+                            listings=(),
+                            duration_seconds=0.0,
+                            started_at=datetime.now(timezone.utc),
+                            crawl_succeeded=False,
+                        )
+                    yield batch
+                    # Submit only after the consumer processes this batch.
+                    submit_next()
+
+    def _crawl_source(
+        self, source: Source, source_number: int, source_total: int
+    ) -> SourceScanBatch:
+        name = source.organisation_name or source.domain
         print(
-            f"Scanning {len(sources)} sources with {workers} "
-            "independent site crawlers",
+            f"\\nScanning organisation website {source_number}/{source_total}: {name}",
             flush=True,
         )
+        started = time.perf_counter()
+        started_at = self._record_scan_started(source.id)
+        try:
+            listings = self._scan_source(source)
+        except Exception as exc:
+            elapsed = time.perf_counter() - started
+            response = getattr(exc, "response", None)
+            self._record_scan_failure(
+                source_id=source.id, duration_seconds=elapsed,
+                http_status=getattr(response, "status_code", None),
+                error_message=f"{type(exc).__name__}: {str(exc)[:350]}",
+            )
+            print(
+                f"  Website scan failed for {source.domain}: {type(exc).__name__}",
+                flush=True,
+            )
+            return SourceScanBatch(source.id, name, (), elapsed, started_at, False)
 
-        def scan_in_worker(source: Source, number: int) -> list[RawOpportunity]:
-            crawler = type(self)()
-            return crawler._scan_one_source(source, number, len(sources))
+        elapsed = time.perf_counter() - started
+        print(
+            f"  Possible listings collected: {len(listings)} ({elapsed:.1f}s)",
+            flush=True,
+        )
+        return SourceScanBatch(
+            source.id, name, tuple(listings), elapsed, started_at, True
+        )
 
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {
-                pool.submit(scan_in_worker, source, number): source
-                for number, source in enumerate(sources, start=1)
-            }
-            for future in as_completed(futures):
-                source = futures[future]
-                try:
-                    listings = future.result()
-                except Exception as exc:
-                    print(
-                        f"  Source worker failed for {source.domain}: "
-                        f"{type(exc).__name__}",
-                        flush=True,
-                    )
-                    continue
-                for item in listings:
-                    if item.source_url not in seen_urls:
-                        seen_urls.add(item.source_url)
-                        yield item
+    def acknowledge_source(self, batch: SourceScanBatch) -> None:
+        """Mark the site scanned once all its listings were fully processed."""
+        if batch.crawl_succeeded:
+            self._record_scan_success(
+                source_id=batch.source_id,
+                duration_seconds=batch.duration_seconds,
+                opportunities_found=len(batch.listings),
+                expected_started_at=batch.started_at,
+            )
 
     def _scan_one_source(
         self, source: Source, source_number: int, source_total: int
     ) -> list[RawOpportunity]:
-        organisation_name = source.organisation_name or source.domain
-        print(
-            "\nScanning organisation website "
-            f"{source_number}/{source_total}: {organisation_name}",
-            flush=True,
-        )
-        started_at = time.perf_counter()
-        self._record_scan_started(source.id)
-        try:
-            listings = self._scan_source(source)
-            elapsed = time.perf_counter() - started_at
-            self._record_scan_success(
-                source_id=source.id,
-                duration_seconds=elapsed,
-                opportunities_found=len(listings),
-            )
-        except Exception as exc:
-            elapsed = time.perf_counter() - started_at
-            response = getattr(exc, "response", None)
-            status_code = getattr(response, "status_code", None)
-            self._record_scan_failure(
-                source_id=source.id,
-                duration_seconds=elapsed,
-                http_status=status_code,
-                error_message=f"{type(exc).__name__}: {str(exc)[:350]}",
-            )
-            print(
-                f"  Website scan failed for {source.domain}: "
-                f"{type(exc).__name__}",
-                flush=True,
-            )
-            return []
-
-        print(
-            f"  Possible listings collected: {len(listings)} "
-            f"({elapsed:.1f}s)",
-            flush=True,
-        )
-        return listings
+        """Compatibility helper for direct callers."""
+        batch = self._crawl_source(source, source_number, source_total)
+        if batch.crawl_succeeded:
+            self.acknowledge_source(batch)
+        return list(batch.listings)
 
     def _get_sources(
         self,
