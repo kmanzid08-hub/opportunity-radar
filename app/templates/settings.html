@@ -1,9 +1,75 @@
-{% extends 'beta_base.html' %}{% block title %}Account | Opportunity Radar{% endblock %}
-{% block content %}<h1>Account</h1><p>{{ request.state.user.email }} · {{ workspace.name }}</p>
-<p>Private beta access is managed by invitation. Your company profiles, assessments and Pipeline notes are scoped to this workspace. Shared source notices remain available to invited users.</p>
+{% extends 'beta_base.html' %}
+{% block title %}Account | Opportunity Radar{% endblock %}
+{% block content %}
+<h1>Account</h1>
+<p>{{ request.state.user.email }} · {{ workspace_name }}</p>
+<p>Private beta access is managed by invitation. Members of the same workspace can collaborate on company profiles, assessments and Pipeline notes. Shared source notices are available to invited users.</p>
 <p>Allowance: 10 analysis actions per user per hour, up to 9 provider attempts per action, and 90 provider attempts per workspace per day. Failed attempts count toward the allowance.</p>
-<h2>Change password</h2><form action="/settings/password" method="post" class="profile-form-grid"><input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
+
+{% if request.state.user.is_admin %}
+<section class="detail-section">
+<h2>Team members</h2>
+<p>Invite a person by email. They will set their own password using a one-time invitation code. Invitations expire after 48 hours. New accounts have standard member permissions, not administrator access.</p>
+{% if team_error %}<p role="alert">{{ team_error }}</p>{% endif %}
+{% if team_message %}<p role="status">{{ team_message }}</p>{% endif %}
+{% if invitation_code %}
+<div class="detail-section" aria-label="New invitation code">
+<p><strong>One-time invitation for {{ invitation_email }}</strong></p>
+<p>Ask this person to open <a href="/accept-invite">Activate account</a>, enter the code below, and choose their own password. Share the code privately; it will not be displayed again.</p>
+<p><code style="overflow-wrap:anywhere;user-select:all;">{{ invitation_code }}</code></p>
+</div>
+{% endif %}
+<form action="/settings/team/invite" method="post" class="profile-form-grid">
+<input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
+<label class="field"><span>New member's email</span><input type="email" name="email" required maxlength="254" autocomplete="off" placeholder="person@example.com"></label>
+<button class="button" type="submit">Create invitation</button>
+</form>
+{% if team_members %}
+<h3>Existing members</h3>
+<div style="overflow-x:auto;">
+<table style="width:100%;border-collapse:collapse;">
+<thead><tr><th scope="col">Email</th><th scope="col">Role</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
+<tbody>
+{% for member in team_members %}
+<tr>
+<td>{{ member.email }}</td>
+<td>{{ 'Administrator' if member.is_admin else 'Member' }}</td>
+<td>{{ 'Deactivated' if not member.is_active else ('Invitation pending' if member.pending else 'Active') }}</td>
+<td>
+{% if not member.is_admin and member.id != request.state.user.user_id %}
+<form method="post" action="/settings/team/reinvite" style="display:inline-block;">
+<input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
+<input type="hidden" name="user_id" value="{{ member.id }}">
+<button class="button secondary" type="submit">Reset invitation</button>
+</form>
+{% if member.is_active %}
+<form method="post" action="/settings/team/deactivate" style="display:inline-block;">
+<input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
+<input type="hidden" name="user_id" value="{{ member.id }}">
+<button class="button secondary" type="submit">Deactivate</button>
+</form>
+{% endif %}
+{% endif %}
+</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endif %}
+</section>
+{% endif %}
+
+<h2>Change password</h2>
+<form action="/settings/password" method="post" class="profile-form-grid">
+<input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
 <label class="field"><span>Current password</span><input type="password" name="current_password" required maxlength="256" autocomplete="current-password"></label>
-<label class="field"><span>New password (12–256 characters)</span><input type="password" name="password" required minlength="12" maxlength="256" autocomplete="new-password"></label><button class="button" type="submit">Change password</button></form>
+<label class="field"><span>New password (12–256 characters)</span><input type="password" name="password" required minlength="12" maxlength="256" autocomplete="new-password"></label>
+<button class="button" type="submit">Change password</button>
+</form>
 <p>Changing your password signs out your other sessions. For password recovery, contact the beta administrator.</p>
-<form action="/logout" method="post"><input type="hidden" name="csrf_token" value="{{ request.state.csrf }}"><button class="button secondary" type="submit">Sign out</button></form>{% endblock %}
+<form action="/logout" method="post">
+<input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
+<button class="button secondary" type="submit">Sign out</button>
+</form>
+{% endblock %}
