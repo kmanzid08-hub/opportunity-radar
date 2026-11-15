@@ -24,6 +24,8 @@ jobs:
         run: pip install -r requirements.txt
       - name: Compile Python
         run: python -m compileall -q app tests
+      - name: Run complete test suite
+        run: python -m pytest -q
       - name: Verify resumable scanning and legacy behavior
         run: |
           python -m pytest -q \
