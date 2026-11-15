@@ -64,10 +64,22 @@ def scope_queries(state: ORMExecuteState) -> None:
     )
     options = [
         with_loader_criteria(
-            BetaUser, BetaUser.id == user.user_id, include_aliases=True
+            BetaUser,
+            # An administrator may manage only accounts in their workspace.
+            # Everyone else can access only their own identity.
+            (BetaUser.workspace_id == workspace_id)
+            if user.is_admin
+            else (BetaUser.id == user.user_id),
+            include_aliases=True,
         ),
         with_loader_criteria(
-            BetaSession, BetaSession.user_id == user.user_id, include_aliases=True
+            BetaSession,
+            BetaSession.user_id.in_(
+                select(BetaUser.id).where(BetaUser.workspace_id == workspace_id)
+            )
+            if user.is_admin
+            else (BetaSession.user_id == user.user_id),
+            include_aliases=True,
         ),
         with_loader_criteria(
             Workspace, Workspace.id == workspace_id, include_aliases=True
@@ -144,9 +156,14 @@ def scope_writes(db: Session, *_args: object) -> None:
     if user is None:
         return
     from app.models import Organization, Opportunity, AIOpportunityAnalysis
-    from app.beta_models import WorkspaceOpportunity
+    from app.beta_models import BetaUser, WorkspaceOpportunity
 
     for item in db.new:
+        if isinstance(item, BetaUser):
+            if not user.is_admin or item.workspace_id != user.workspace_id:
+                raise PermissionError("Only workspace administrators can add users")
+            if item.is_admin:
+                raise PermissionError("New administrators require operator approval")
         if isinstance(
             item,
             (Organization, Opportunity, AIOpportunityAnalysis, WorkspaceOpportunity),
@@ -156,6 +173,11 @@ def scope_writes(db: Session, *_args: object) -> None:
             if item.workspace_id != user.workspace_id:
                 raise PermissionError("Workspace ownership mismatch")
     for item in db.dirty | db.deleted:
+        if isinstance(item, BetaUser):
+            if item.workspace_id != user.workspace_id:
+                raise PermissionError("Cannot change another workspace's accounts")
+            if item.id != user.user_id and not user.is_admin:
+                raise PermissionError("Only workspace administrators can manage users")
         if (
             isinstance(
                 item,

@@ -2,12 +2,14 @@
 
 from datetime import timedelta
 import logging
+import re
 import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import delete, select, text, update
+from sqlalchemy.exc import IntegrityError
 
 from app import database
 from app.beta_models import BetaSession, BetaUser, Workspace
@@ -205,13 +207,160 @@ def logout(request: Request):
     return response
 
 
+def team_page(request: Request, *, invitation_code: str | None = None,
+              invitation_email: str | None = None, team_message: str | None = None,
+              team_error: str | None = None):
+    """Render current-workspace membership; never disclose password hashes."""
+    identity = principal.get()
+    assert identity is not None
+    with database.SessionLocal() as db:
+        workspace = db.get(Workspace, identity.workspace_id)
+        members = (
+            list(db.scalars(
+                select(BetaUser)
+                .where(BetaUser.workspace_id == identity.workspace_id)
+                .order_by(BetaUser.email.asc())
+            ))
+            if identity.is_admin else []
+        )
+        # Keep ORM instances usable after the session closes.
+        member_rows = [
+            {
+                "id": member.id,
+                "email": member.email,
+                "is_admin": member.is_admin,
+                "is_active": member.is_active,
+                "pending": member.password_hash is None,
+                "invite_expires_at": member.invite_expires_at,
+            }
+            for member in members
+        ]
+        workspace_name = workspace.name if workspace is not None else ""
+    return page(
+        request, "settings.html", workspace_name=workspace_name,
+        team_members=member_rows, invitation_code=invitation_code,
+        invitation_email=invitation_email, team_message=team_message,
+        team_error=team_error,
+    )
+
+
 @router.get("/settings")
 def settings_page(request: Request):
-    user = principal.get()
-    assert user is not None
+    return team_page(request)
+
+
+def require_team_admin():
+    identity = principal.get()
+    if identity is None or not identity.is_admin:
+        raise HTTPException(403, "Only a workspace administrator can manage users.")
+    return identity
+
+
+def valid_account_email(email: str) -> str | None:
+    email = email.strip().casefold()
+    # Keep usernames predictable; avoid whitespace and exotic Unicode email
+    # forms that a browser could normalize inconsistently at sign-in.
+    if not 3 <= len(email) <= 254 or not email.isascii():
+        return None
+    if not re.fullmatch(r"[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", email):
+        return None
+    if ".." in email or email.startswith(".") or "@." in email:
+        return None
+    return email
+
+
+@router.post("/settings/team/invite")
+def invite_teammate(
+    request: Request,
+    email: Annotated[str, Form(max_length=254)],
+):
+    """Admin creates a scoped login; invitee chooses their own password."""
+    identity = require_team_admin()
+    if not take_limit(f"team-invite:user:{identity.user_id}", 10, 3600):
+        return error_page("Too many invitations. Try again later.", 429)
+    normalized = valid_account_email(email)
+    if normalized is None:
+        return team_page(request, team_error="Enter a valid email address.")
+    token = secrets.token_urlsafe(32)
     with database.SessionLocal() as db:
-        workspace = db.get(Workspace, user.workspace_id)
-    return page(request, "settings.html", workspace=workspace)
+        if db.scalar(select(BetaUser.id).where(BetaUser.email == normalized)):
+            return team_page(
+                request,
+                team_error="That email already has an account. Use a replacement invitation if necessary.",
+            )
+        db.add(BetaUser(
+            workspace_id=identity.workspace_id,
+            email=normalized,
+            password_hash=None,
+            is_active=True,
+            is_admin=False,
+            invite_hash=digest(token),
+            invite_expires_at=utcnow() + timedelta(hours=48),
+        ))
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            return team_page(
+                request, team_error="An account with that email already exists."
+            )
+    # Plaintext token exists only in this response; the DB stores its hash.
+    return team_page(
+        request, invitation_code=token, invitation_email=normalized,
+        team_message="Account created. Share this one-use invitation code privately.",
+    )
+
+
+@router.post("/settings/team/reinvite")
+def reinvite_teammate(
+    request: Request,
+    user_id: Annotated[int, Form(ge=1)],
+):
+    identity = require_team_admin()
+    if not take_limit(f"team-invite:user:{identity.user_id}", 10, 3600):
+        return error_page("Too many invitations. Try again later.", 429)
+    token = secrets.token_urlsafe(32)
+    with database.SessionLocal() as db:
+        member = db.scalar(select(BetaUser).where(
+            BetaUser.id == user_id, BetaUser.workspace_id == identity.workspace_id
+        ))
+        if member is None:
+            raise HTTPException(404, "Team member not found.")
+        if member.is_admin or member.id == identity.user_id:
+            raise HTTPException(403, "Cannot reset an administrator using this form.")
+        email = member.email
+        member.is_active = True
+        member.password_hash = None
+        member.invite_hash = digest(token)
+        member.invite_expires_at = utcnow() + timedelta(hours=48)
+        db.execute(delete(BetaSession).where(BetaSession.user_id == member.id))
+        db.commit()
+    return team_page(
+        request, invitation_code=token, invitation_email=email,
+        team_message="Previous credentials revoked. Share the new one-use code privately.",
+    )
+
+
+@router.post("/settings/team/deactivate")
+def deactivate_teammate(
+    request: Request,
+    user_id: Annotated[int, Form(ge=1)],
+):
+    identity = require_team_admin()
+    with database.SessionLocal() as db:
+        member = db.scalar(select(BetaUser).where(
+            BetaUser.id == user_id, BetaUser.workspace_id == identity.workspace_id
+        ))
+        if member is None:
+            raise HTTPException(404, "Team member not found.")
+        if member.is_admin or member.id == identity.user_id:
+            raise HTTPException(403, "Administrator accounts cannot be deactivated here.")
+        member.is_active = False
+        member.invite_hash = None
+        member.invite_expires_at = None
+        db.execute(delete(BetaSession).where(BetaSession.user_id == member.id))
+        db.commit()
+    return RedirectResponse("/settings", status_code=303)
 
 
 @router.post("/settings/password")

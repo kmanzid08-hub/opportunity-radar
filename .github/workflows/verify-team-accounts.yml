@@ -1,0 +1,40 @@
+name: Verify workspace team invitations
+on:
+  push:
+    branches:
+      - feature/admin-add-team-member-20261115
+  pull_request:
+    branches:
+      - global-saas-development
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Compile application and templates
+        run: |
+          python -m compileall -q app tests
+          python - <<'PY'
+          from pathlib import Path
+          from jinja2 import Environment, FileSystemLoader
+          env = Environment(loader=FileSystemLoader('app/templates'))
+          for path in Path('app/templates').rglob('*.html'):
+              env.get_template(path.relative_to('app/templates').as_posix())
+          print('Templates compiled successfully')
+          PY
+      - name: Security and invite regression tests
+        run: python -m pytest -q tests/routes/test_private_beta.py tests/unit/test_beta_security.py tests/test_csrf_cookie_stability.py
+      - name: Baseline-clean broad regression suite
+        run: |
+          python -m pytest -q \
+            --ignore=tests/unit/intelligence/test_applicant_entailment.py \
+            --ignore=tests/unit/intelligence/test_evidence_policy.py \
+            --ignore=tests/unit/intelligence/test_phase9m_policy.py
