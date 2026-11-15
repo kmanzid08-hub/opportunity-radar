@@ -483,9 +483,10 @@ class CompanyWebsiteScanner(BaseScanner):
                             started_at=datetime.now(timezone.utc),
                             crawl_succeeded=False,
                         )
-                    yield batch
-                    # Submit only after the consumer processes this batch.
+                    # Keep workers busy during slow AI processing, while
+                    # retaining a hard bound of twice the worker count.
                     submit_next()
+                    yield batch
 
     def _crawl_source(
         self, source: Source, source_number: int, source_total: int
