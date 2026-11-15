@@ -493,7 +493,7 @@ class CompanyWebsiteScanner(BaseScanner):
     ) -> SourceScanBatch:
         name = source.organisation_name or source.domain
         print(
-            f"\\nScanning organisation website {source_number}/{source_total}: {name}",
+            f"\nScanning organisation website {source_number}/{source_total}: {name}",
             flush=True,
         )
         started = time.perf_counter()
