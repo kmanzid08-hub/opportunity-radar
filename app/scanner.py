@@ -357,6 +357,14 @@ def run_scanner() -> None:
     approved_count = approve_existing_sources()
     expired_count = mark_expired_opportunities()
     scanners = get_scanners()
+    # In recovery mode, skip the separate job board. Only publishers with
+    # unfinished checkpoints are selected by CompanyWebsiteScanner.
+    import os
+    if os.getenv("SOURCE_SCAN_RECOVERY_ONLY", "").strip().lower() in {
+        "true", "1", "yes", "on"
+    }:
+        scanners = [item for item in scanners if isinstance(item, CompanyWebsiteScanner)]
+        print("Recovery mode: retrying only unfinished publisher scans", flush=True)
     try:
         company_profiles = load_active_company_profiles(None)
     except Exception as exc:

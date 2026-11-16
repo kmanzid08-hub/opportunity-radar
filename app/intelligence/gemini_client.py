@@ -18,6 +18,7 @@ from app.intelligence.gemini_diagnostics import (
     safe_model_name,
 )
 from app.intelligence.gemini_schema import sanitize_gemini_schema
+from app.intelligence.gemini_circuit import BACKUP_CATEGORIES, PROVIDER_CIRCUIT
 
 
 logger = logging.getLogger(__name__)
@@ -201,6 +202,20 @@ class GeminiClient:
         if not prompt.strip():
             raise ValueError("Gemini prompt must not be blank.")
 
+        # A persistent outage or exhausted quota should not be retried on
+        # every notice. The circuit applies only when the paid backup is
+        # explicitly configured, so offline/normal Gemini behavior remains
+        # unchanged. The callback still runs on the actual backup request.
+        from app.intelligence import openai_fallback
+        backup_available = openai_fallback.fallback_enabled()
+        if backup_available:
+            unavailable = PROVIDER_CIRCUIT.unavailable()
+            if unavailable is not None:
+                raise GeminiAPIError(
+                    "Gemini is temporarily unavailable; backup may be used.",
+                    diagnostic=unavailable,
+                )
+
         try:
             sdk = self._get_client()
         except GeminiError as exc:
@@ -229,8 +244,17 @@ class GeminiClient:
                 raise
             except Exception as exc:
                 diagnostic = classify_gemini_error(exc)
-                retrying = diagnostic.retryable and attempt < self.max_attempts
+                # Avoid repeated 429/503 calls when the opt-in backup can
+                # classify the exact same schema and evidence immediately.
+                use_backup = backup_available and diagnostic.category in BACKUP_CATEGORIES
+                retrying = (
+                    diagnostic.retryable
+                    and attempt < self.max_attempts
+                    and not use_backup
+                )
                 self._log_attempt_failure(diagnostic, operation, attempt, retrying)
+                if use_backup:
+                    PROVIDER_CIRCUIT.record_failure(diagnostic)
                 if not retrying:
                     raise GeminiAPIError(
                         "Gemini generation failed.", diagnostic=diagnostic
@@ -239,6 +263,8 @@ class GeminiClient:
                 delay = min(2.0, 2 ** (attempt - 1)) + max(0.0, min(0.25, jitter))
                 (self._sleep or time.sleep)(delay)
             else:
+                if backup_available:
+                    PROVIDER_CIRCUIT.record_success()
                 logger.info(
                     "Gemini %s attempt %s/%s succeeded",
                     self._stage(operation),
@@ -263,11 +289,14 @@ class GeminiClient:
                 ),
             )
         except GeminiAPIError as exc:
-            if exc.diagnostic is not None and exc.diagnostic.category == "QUOTA_EXCEEDED":
+            if exc.diagnostic is not None and exc.diagnostic.category in BACKUP_CATEGORIES:
                 from app.intelligence import openai_fallback
 
                 if openai_fallback.fallback_enabled():
-                    logger.warning("Gemini quota exhausted; switching to configured OpenAI backup for text")
+                    logger.warning(
+                        "Gemini temporarily unavailable category=%s; switching to configured OpenAI backup for text",
+                        exc.diagnostic.category,
+                    )
                     try:
                         return openai_fallback.generate_text(
                             prompt, system_instruction=system_instruction
@@ -319,12 +348,13 @@ class GeminiClient:
                 ),
             )
         except GeminiAPIError as exc:
-            if exc.diagnostic is not None and exc.diagnostic.category == "QUOTA_EXCEEDED":
+            if exc.diagnostic is not None and exc.diagnostic.category in BACKUP_CATEGORIES:
                 from app.intelligence import openai_fallback
 
                 if openai_fallback.fallback_enabled():
                     logger.warning(
-                        "Gemini quota exhausted; switching to configured OpenAI backup for %s",
+                        "Gemini temporarily unavailable category=%s; switching to configured OpenAI backup for %s",
+                        exc.diagnostic.category,
                         self._stage(operation),
                     )
                     try:

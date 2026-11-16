@@ -1,4 +1,4 @@
-# Optional OpenAI API backup for Gemini quota exhaustion
+# Optional OpenAI API backup for Gemini quota or temporary service outage
 
 This is a *server-side API integration*, not a ChatGPT login. A paid ChatGPT
 subscription does not automatically supply API credentials or API capacity to
@@ -12,8 +12,15 @@ until all required values are configured.
 
 - Gemini remains the primary provider for source assessment, notice extraction,
   company matching, triage, and structured evaluation.
-- Only a confirmed Gemini `QUOTA_EXCEEDED` failure can trigger the OpenAI API.
-  Ordinary provider errors and generic 429 rate limits do not trigger fallback.
+- An explicitly confirmed Gemini `QUOTA_EXCEEDED` response (429) or temporary
+  Gemini `MODEL_UNAVAILABLE` outage (503) can trigger the OpenAI API.
+  Ordinary errors, authentication failures, and generic 429 rate limits do
+  **not** trigger paid fallback.
+- While the backup is enabled, a process-wide circuit breaker suppresses
+  repeated Gemini calls for 60 minutes after quota exhaustion or 5 minutes
+  after a temporary 503 outage. Gemini is retried after the cooldown.
+  The circuit resets at process restart. With fallback disabled, Gemini's
+  existing bounded retry behavior is unchanged.
 - The backup uses the same existing Pydantic model and validation policies.
   It also uses the existing per-workspace AI request budget for interactive users.
 - OpenAI receives the relevant prompt, including the notice and any company
@@ -44,6 +51,16 @@ In the Render service **Environment** configuration add:
 
 Save the environment configuration and deploy. The API key must never be
 committed to GitHub or included in logs or screenshots.
+
+## Incomplete website recovery
+
+After a scheduled scan, a website is considered incomplete when its most recent
+scan start time is later than its last completed scan time. A dedicated recovery
+run can set `SOURCE_SCAN_RECOVERY_ONLY=true` to revisit only those active,
+approved websites (at most 50, started within the past 72 hours), without
+rescanning job boards or deleting previous successful findings. If any AI
+verification or matching still fails, that website remains eligible for another
+recovery attempt. The regular daily scan remains unchanged.
 
 ## Test and troubleshooting
 
