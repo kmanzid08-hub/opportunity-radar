@@ -15,13 +15,12 @@ from app.intelligence.gemini_diagnostics import GeminiDiagnostic
 logger = logging.getLogger(__name__)
 
 BACKUP_CATEGORIES = frozenset({
-    "QUOTA_EXCEEDED", "RATE_LIMIT", "MODEL_UNAVAILABLE",
+    "QUOTA_EXCEEDED", "MODEL_UNAVAILABLE",
 })
 
 # Check provider availability periodically, without hammering a broken API.
 COOLDOWN_SECONDS = {
     "QUOTA_EXCEEDED": 3600,
-    "RATE_LIMIT": 900,
     "MODEL_UNAVAILABLE": 300,
 }
 
