@@ -569,7 +569,29 @@ class CompanyWebsiteScanner(BaseScanner):
             changed = False
             due_source_ids: list[int] = []
 
+            recovery_only = os.getenv("SOURCE_SCAN_RECOVERY_ONLY", "").strip().lower() in {
+                "true", "1", "yes", "on"
+            }
+            # A source whose last crawl started after its last recorded
+            # completion was interrupted or had failed downstream AI work.
+            # Retry these sites alone, even if the normal scan interval has
+            # not elapsed. Never reset their checkpoint simply to force a run.
             for source in active_sources:
+                if recovery_only:
+                    started_at = source.last_scan_started_at
+                    finished_at = source.last_scanned_at
+                    if started_at is None:
+                        continue
+                    if started_at.tzinfo is None:
+                        started_at = started_at.replace(tzinfo=timezone.utc)
+                    if finished_at is not None and finished_at.tzinfo is None:
+                        finished_at = finished_at.replace(tzinfo=timezone.utc)
+                    if finished_at is not None and started_at <= finished_at:
+                        continue
+                    # Avoid reprocessing years-old interrupted scans.
+                    if now - started_at > timedelta(hours=72):
+                        continue
+
                 if not source.is_approved:
                     source.is_approved = (
                         True
@@ -620,7 +642,7 @@ class CompanyWebsiteScanner(BaseScanner):
                     )
                     changed = True
 
-                if self._source_is_due(
+                if recovery_only or self._source_is_due(
                     source,
                     now,
                 ):
@@ -664,7 +686,8 @@ class CompanyWebsiteScanner(BaseScanner):
                     Source.organisation_name.asc(),
                 )
                 .limit(
-                    self.MAX_SOURCES_PER_SCAN
+                    min(self.MAX_SOURCES_PER_SCAN, 50)
+                    if recovery_only else self.MAX_SOURCES_PER_SCAN
                 )
             ).all()
 
