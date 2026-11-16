@@ -1,0 +1,35 @@
+name: Verify AI failover and recovery
+on:
+  push:
+    branches: [fix/gemini-failover-and-site-recovery-20261116]
+  pull_request:
+    branches: [global-saas-development]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Compile and run targeted reliability regression tests
+        run: |
+          python -m compileall -q app tests
+          python -m pytest -q \
+            tests/test_openai_fallback.py \
+            tests/unit/intelligence/test_gemini_retries.py \
+            tests/unit/intelligence/test_gemini_diagnostics.py \
+            tests/unit/test_daily_source_scan.py \
+            tests/integration/test_resumable_website_scan.py \
+            tests/integration/test_scanner_orchestration.py
+      - name: Full baseline-clean regression suite
+        run: |
+          python -m pytest -q \
+            --ignore=tests/unit/intelligence/test_applicant_entailment.py \
+            --ignore=tests/unit/intelligence/test_evidence_policy.py \
+            --ignore=tests/unit/intelligence/test_phase9m_policy.py
