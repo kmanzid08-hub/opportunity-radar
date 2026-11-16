@@ -1,0 +1,83 @@
+name: Recover incomplete website scans
+
+on:
+  workflow_dispatch:
+  # First publication triggers a single recovery run. Later code pushes do not.
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/recover-incomplete-sources.yml
+
+concurrency:
+  group: opportunity-radar-data-pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_FALLBACK_ENABLED: ${{ vars.OPENAI_FALLBACK_ENABLED || 'true' }}
+      OPENAI_FALLBACK_MODEL: ${{ vars.OPENAI_FALLBACK_MODEL || 'gpt-5-mini' }}
+      AUTOMATION_MODE: scan
+      SOURCE_SCAN_RECOVERY_ONLY: 'true'
+      ENABLE_INTERNAL_SCHEDULER: 'false'
+      DAILY_SOURCE_SCAN: 'true'
+      WEBSITE_SCAN_WORKERS: '6'
+      WEBSITE_MAX_PAGES_PER_SOURCE: '12'
+      WEBSITE_CRAWL_BUDGET_SECONDS: '55'
+      ENABLE_PDF_OCR: 'true'
+      PDF_OCR_CACHE_PATH: '.cache/pdf_ocr_cache.json'
+      FORCE_WEBSITE_DISCOVERY: 'false'
+
+    steps:
+      - name: Check out verified recovery code
+        uses: actions/checkout@v4
+        with:
+          ref: global-saas-development
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install OCR when available
+        shell: bash
+        run: |
+          if ! command -v tesseract >/dev/null 2>&1; then
+            timeout 90s bash -c 'export DEBIAN_FRONTEND=noninteractive; sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr' || echo "OCR unavailable; continue"
+          fi
+
+      - name: Restore reusable scanned-tender OCR text
+        uses: actions/cache@v4
+        with:
+          path: .cache/pdf_ocr_cache.json
+          key: pdf-ocr-recovery-${{ github.run_id }}
+          restore-keys: |
+            pdf-ocr-
+
+      - name: Verify AI and database credentials
+        shell: bash
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$GEMINI_API_KEY" ] || [ -z "$BRAVE_API_KEY" ]; then
+            echo "::error::DATABASE_URL, GEMINI_API_KEY and BRAVE_API_KEY must be configured."
+            exit 1
+          fi
+
+      - name: Reprocess only unfinished publisher scans
+        run: python -m app.automation_run
+
+      - name: Recheck outstanding verified company matches
+        run: python -m app.backfill_matches
