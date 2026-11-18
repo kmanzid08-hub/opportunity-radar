@@ -15,7 +15,7 @@
             <a class="button tertiary" href="/{% if selected_company_id %}?company_id={{ selected_company_id }}{% endif %}">← Back to Discover</a>
         </div>
 
-        {% if selected_company_id %}<form action="/opportunities/{{ opportunity.id }}/refresh" method="post" data-analysis><input type="hidden" name="csrf_token" value="{{ request.state.csrf }}"><input type="hidden" name="company_id" value="{{ selected_company_id }}"><button class="button secondary" type="submit">Refresh company assessment</button></form>{% endif %}
+        {% if selected_company_id %}<details class="refresh-assessment"><summary>Refresh company assessment</summary><form action="/opportunities/{{ opportunity.id }}/refresh" method="post" data-analysis><input type="hidden" name="csrf_token" value="{{ request.state.csrf }}"><input type="hidden" name="company_id" value="{{ selected_company_id }}"><button class="button secondary" type="submit">Run assessment</button></form><p class="quiet">Re-evaluates this company using AI and its current profile.</p></details>{% endif %}
         <div class="detail-grid">
             <div>
                 <header class="detail-hero">
@@ -23,14 +23,18 @@
                     <h1>{{ opportunity.ai_title or opportunity.title }}</h1>
                     <p class="lede">{{ opportunity.ai_buyer or opportunity.organisation_name or 'Buyer not identified' }}</p>
                     <div class="detail-facts">
+                        <div class="fact"><span class="label">Deadline</span><strong>{% if opportunity.deadline %}{{ opportunity.deadline.strftime('%d %b %Y') }}{% else %}Not published{% endif %}</strong></div>
                         <div class="fact"><span class="label">Buyer country</span><strong>{{ opportunity.ai_buyer_country or 'Unknown' }}</strong></div>
                         <div class="fact"><span class="label">Delivery</span><strong>{{ opportunity.ai_geography }}</strong></div>
-                        <div class="fact"><span class="label">Eligibility</span><strong>{{ opportunity.ai_eligibility_countries|join(' · ') or 'Not specified' }}</strong></div>
-                        <div class="fact"><span class="label">Scope</span><strong>{{ opportunity.ai_geographic_scope }}</strong></div>
-                        <div class="fact"><span class="label">Location</span><strong>{{ opportunity.ai_location or 'Not identified' }}</strong></div>
-                        <div class="fact"><span class="label">Deadline</span><strong>{% if opportunity.deadline %}{{ opportunity.deadline.strftime('%d %b %Y') }}{% else %}Not published{% endif %}</strong></div>
-                        <div class="fact"><span class="label">Status</span><strong>{{ opportunity.status }}</strong></div>
                     </div>
+                    <details class="detail-more-facts"><summary>More opportunity details</summary>
+                        <div class="detail-facts">
+                            <div class="fact"><span class="label">Eligibility</span><strong>{{ opportunity.ai_eligibility_countries|join(' · ') or 'Not specified' }}</strong></div>
+                            <div class="fact"><span class="label">Scope</span><strong>{{ opportunity.ai_geographic_scope }}</strong></div>
+                            <div class="fact"><span class="label">Location</span><strong>{{ opportunity.ai_location or 'Not identified' }}</strong></div>
+                            <div class="fact"><span class="label">Status</span><strong>{{ opportunity.status }}</strong></div>
+                        </div>
+                    </details>              </div>
                 </header>
 
                 {% if opportunity.display_triage %}
@@ -115,6 +119,9 @@
                     <p>{{ opportunity.ai_summary or opportunity.description or 'No structured summary is available.' }}</p>
                 </section>
 
+                <details class="detail-deep-dive">
+                    <summary>Full tender requirements and submission details <span aria-hidden="true">⌄</span></summary>
+                    <div class="deep-dive-content">
                 {% if opportunity.ai_scope %}
                 <section class="detail-section"><h2>Scope</h2><p>{{ opportunity.ai_scope }}</p></section>
                 {% endif %}
@@ -136,6 +143,8 @@
                 {% if opportunity.ai_submission_method or opportunity.ai_submission_address %}
                 <section class="detail-section"><h2>Submission</h2>{% if opportunity.ai_submission_method %}<p>{{ opportunity.ai_submission_method }}</p>{% endif %}{% if opportunity.ai_submission_address %}<p class="quiet">{{ opportunity.ai_submission_address }}</p>{% endif %}</section>
                 {% endif %}
+                    </div>
+                </details>
             </div>
 
             <aside class="detail-aside" aria-label="Company match and actions">
