@@ -267,6 +267,16 @@ class GeminiClient:
             else:
                 if backup_available:
                     PROVIDER_CIRCUIT.record_success()
+                usage = getattr(result, "usage_metadata", None)
+                if usage is not None:
+                    logger.info(
+                        "Gemini usage stage=%s input_tokens=%s output_tokens=%s "
+                        "total_tokens=%s",
+                        self._stage(operation),
+                        getattr(usage, "prompt_token_count", "unknown"),
+                        getattr(usage, "candidates_token_count", "unknown"),
+                        getattr(usage, "total_token_count", "unknown"),
+                    )
                 logger.info(
                     "Gemini %s attempt %s/%s succeeded",
                     self._stage(operation),
