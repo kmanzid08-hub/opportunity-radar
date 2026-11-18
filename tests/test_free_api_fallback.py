@@ -254,3 +254,90 @@ def test_free_api_error_preserves_existing_paid_fallback(monkeypatch):
         lambda *_args, **_kwargs: Sample(value=19),
     )
     assert client.generate_structured("notice", Sample).value == 19
+
+
+def test_free_provider_round_robin_shares_first_choice():
+    from app.intelligence import free_api_fallback as module
+    first = configured("groq")
+    second = configured("nvidia")
+    original = module._route_sequence
+    try:
+        module._route_sequence = 0
+        assert [c.name for c in module._ordered_configs([first, second])] == [
+            "groq", "nvidia"
+        ]
+        assert [c.name for c in module._ordered_configs([first, second])] == [
+            "nvidia", "groq"
+        ]
+        assert [c.name for c in module._ordered_configs([first, second])] == [
+            "groq", "nvidia"
+        ]
+    finally:
+        module._route_sequence = original
+
+
+def test_shared_minute_and_day_token_budget_survives_processes(
+    monkeypatch, isolated_session_factory,
+):
+    from app.intelligence import free_api_fallback as module
+    from app import database
+    from app.beta_models import BetaUsage
+    monkeypatch.setenv("AI_SHARED_PROVIDER_BUDGETS", "true")
+    monkeypatch.setattr(database, "SessionLocal", isolated_session_factory)
+    cfg = configured("groq", rpm=2, tpm=6000, rpd=3, tpd=10000)
+    assert module._reserve_shared_budget(cfg, 2800)
+    assert module._reserve_shared_budget(cfg, 2800)
+    assert not module._reserve_shared_budget(cfg, 1)
+    with isolated_session_factory() as db:
+        assert db.query(BetaUsage).count() == 4
+    # A new function invocation starts with the same persistent counters.
+    assert not module._reserve_shared_budget(cfg, 3000)
+
+
+def test_gemini_uses_public_free_provider_before_google_sdk(monkeypatch):
+    from app.intelligence.schemas import SourceAnalysis
+    from app.intelligence import free_api_fallback as module
+    monkeypatch.setenv("GROQ_API_KEY", "test")
+    monkeypatch.setenv("GROQ_FALLBACK_ENABLED", "true")
+    sdk = Mock()
+    client = GeminiClient(
+        GeminiConfig(api_key="fake-key"), client_factory=lambda **_: sdk
+    )
+    mock_result = SourceAnalysis(
+        decision="ACCEPT", confidence=95, reason="Public tender notices"
+    )
+    monkeypatch.setattr(
+        module, "generate_structured",
+        lambda *args, **kwargs: mock_result,
+    )
+    assert client.generate_structured(
+        "public publisher", SourceAnalysis
+    ) == mock_result
+    sdk.assert_not_called()
+
+
+def test_gemini_handles_public_requests_when_both_free_budgets_empty(monkeypatch):
+    from app.intelligence.schemas import SourceAnalysis
+    from app.intelligence import free_api_fallback as module
+    monkeypatch.setenv("GROQ_API_KEY", "test")
+    monkeypatch.setenv("GROQ_FALLBACK_ENABLED", "true")
+    monkeypatch.setattr(
+        module, "generate_structured",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            module.FreeAPIError("both providers exhausted")
+        ),
+    )
+    expected = SourceAnalysis(
+        decision="REVIEW", confidence=70, reason="Insufficient content"
+    )
+    sdk = Mock()
+    sdk.models.generate_content.return_value = SimpleNamespace(
+        parsed=expected.model_dump(mode="json")
+    )
+    client = GeminiClient(
+        GeminiConfig(api_key="fake-key"), client_factory=lambda **_: sdk
+    )
+    assert client.generate_structured(
+        "public publisher", SourceAnalysis
+    ) == expected
+    assert sdk.models.generate_content.call_count == 1
