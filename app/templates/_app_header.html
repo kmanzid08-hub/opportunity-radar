@@ -1,0 +1,26 @@
+{% set current_path = request.url.path %}
+<a class="skip-link" href="#main-content">Skip to content</a>
+<header class="app-header">
+  <div class="app-header-inner">
+    <a class="brand" href="/" aria-label="Opportunity Radar home">
+      <span class="brand-mark" aria-hidden="true"><span class="brand-center"></span></span>
+      <span class="brand-text">opportunity<span class="brand-light">radar</span><span class="brand-dot">.</span></span>
+    </a>
+    {% if request.state.user %}
+    <nav class="main-nav" aria-label="Primary navigation">
+      <a href="/" class="nav-link{% if current_path == '/' or current_path.startswith('/opportunities/') %} active{% endif %}"{% if current_path == '/' %} aria-current="page"{% endif %}>Discover</a>
+      <a href="/pipeline" class="nav-link{% if current_path.startswith('/pipeline') %} active{% endif %}"{% if current_path.startswith('/pipeline') %} aria-current="page"{% endif %}>Pipeline</a>
+      <a href="/business-profile" class="nav-link{% if current_path.startswith('/business-profile') %} active{% endif %}"{% if current_path.startswith('/business-profile') %} aria-current="page"{% endif %}>Companies</a>
+      <details class="nav-more">
+        <summary class="nav-link{% if current_path.startswith('/sources') or current_path.startswith('/settings') or current_path.startswith('/assessments') %} active{% endif %}">More <span aria-hidden="true" class="nav-chevron">⌄</span></summary>
+        <div class="nav-dropdown">
+          <a href="/sources"{% if current_path.startswith('/sources') %} aria-current="page"{% endif %}>Monitored sources</a>
+          <a href="/assessments"{% if current_path.startswith('/assessments') %} aria-current="page"{% endif %}>Assessments</a>
+          <a href="/settings"{% if current_path.startswith('/settings') %} aria-current="page"{% endif %}>Account & team</a>
+        </div>
+      </details>
+    </nav>
+    <a href="/analyze" class="header-cta"><span aria-hidden="true">＋</span> Analyze a tender</a>
+    {% endif %}
+  </div>
+</header>
