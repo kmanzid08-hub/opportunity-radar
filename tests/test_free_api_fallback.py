@@ -38,6 +38,18 @@ def test_company_private_workflows_not_sent_by_default(monkeypatch):
     sdk.assert_not_called()
 
 
+def test_generic_text_requires_explicit_privacy_opt_in(monkeypatch):
+    monkeypatch.delenv("COMMUNITY_API_ALLOW_COMPANY_DATA", raising=False)
+    monkeypatch.setenv("GROQ_API_KEY", "fake")
+    monkeypatch.setenv("GROQ_FALLBACK_ENABLED", "true")
+    import openai
+    sdk = Mock()
+    monkeypatch.setattr(openai, "OpenAI", sdk)
+    with pytest.raises(free.FreeAPIError, match="unspecified/private text"):
+        free.generate_text("Confidential company bid dossier")
+    sdk.assert_not_called()
+
+
 def configured(name="groq", **overrides):
     d = dict(
         name=name, model="openai/gpt-oss-120b" if name == "groq" else "openai/gpt-oss-20b",
