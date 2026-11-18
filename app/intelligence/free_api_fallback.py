@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from math import ceil
 from threading import Lock
 import json
@@ -18,6 +19,7 @@ import time
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
+from sqlalchemy import select, text
 
 logger = logging.getLogger(__name__)
 ResponseModel = TypeVar("ResponseModel", bound=BaseModel)
@@ -141,6 +143,89 @@ class RequestBudget:
 
 _budgets: dict[str, RequestBudget] = {}
 _budgets_lock = Lock()
+_route_lock = Lock()
+_route_sequence = 0
+
+
+def _ordered_configs(configs: list[ProviderConfig]) -> list[ProviderConfig]:
+    """Rotate the first-choice provider on each request across both quotas."""
+    global _route_sequence
+    if len(configs) < 2:
+        return configs
+    with _route_lock:
+        start = _route_sequence % len(configs)
+        _route_sequence += 1
+    return configs[start:] + configs[:start]
+
+
+def _shared_budget_enabled() -> bool:
+    """PostgreSQL shared counters survive GitHub Actions process restarts."""
+    value = os.getenv("AI_SHARED_PROVIDER_BUDGETS", "auto").strip().lower()
+    if value in {"0", "false", "no", "off"}:
+        return False
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    from app.database import DATABASE_URL
+    return DATABASE_URL.startswith(("postgresql", "postgres:"))
+
+
+def _reserve_shared_budget(config: ProviderConfig, estimate: int) -> bool:
+    """Atomically enforce minute AND daily limits across app + GitHub jobs.
+
+    Reuse the existing beta_usage quota table. PostgreSQL advisory lock protects
+    all four counters for this provider within one short DB transaction.
+    No schema migration, no secret or prompt persistence.
+    """
+    if not _shared_budget_enabled():
+        return True
+    from app.beta_models import BetaUsage
+    from app.database import SessionLocal
+
+    now = datetime.now(timezone.utc)
+    minute_start = now.replace(second=0, microsecond=0)
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    minute = minute_start.strftime("%Y%m%d%H%M")
+    day = day_start.strftime("%Y%m%d")
+    prefix = f"ai-provider-budget:{config.name}:"
+    requirements = [
+        (f"{prefix}m:{minute}:r", 1, config.rpm, minute_start + timedelta(minutes=3)),
+        (f"{prefix}m:{minute}:t", estimate, config.tpm, minute_start + timedelta(minutes=3)),
+        (f"{prefix}d:{day}:r", 1, config.rpd, day_start + timedelta(days=3)),
+        (f"{prefix}d:{day}:t", estimate, config.tpd, day_start + timedelta(days=3)),
+    ]
+    keys = [item[0] for item in requirements]
+    try:
+        with SessionLocal() as db:
+            if db.get_bind().dialect.name == "postgresql":
+                db.execute(
+                    text("SELECT pg_advisory_xact_lock(hashtext(:lock_name))"),
+                    {"lock_name": prefix},
+                )
+            present = {
+                row.key: row
+                for row in db.scalars(select(BetaUsage).where(BetaUsage.key.in_(keys)))
+            }
+            if any(
+                (present[key].count if key in present else 0) + amount > ceiling
+                for key, amount, ceiling, _ in requirements
+            ):
+                return False
+            for key, amount, _ceiling, expiry in requirements:
+                row = present.get(key)
+                if row is None:
+                    db.add(BetaUsage(key=key, count=amount, expires_at=expiry))
+                else:
+                    row.count += amount
+            db.commit()
+        return True
+    except Exception as exc:
+        # Do not make an unmetered free-tier call when central quota storage
+        # is unavailable. The caller may use a different verified provider.
+        logger.warning(
+            "Shared AI provider budget unavailable provider=%s type=%s",
+            config.name, type(exc).__name__,
+        )
+        return False
 
 
 def _get_budget(config: ProviderConfig) -> RequestBudget:
@@ -188,7 +273,9 @@ def _attempt(
         prompt, system_instruction, schema_text, completion_allowance
     )
     budget = _get_budget(config)
-    if not budget.reserve(estimated_tokens):
+    if not budget.reserve(estimated_tokens) or not _reserve_shared_budget(
+        config, estimated_tokens
+    ):
         raise FreeAPIError(
             f"{config.name} budget unavailable for this request or document"
         )
@@ -289,7 +376,7 @@ def generate_structured(
         raise FreeAPIError(
             "Free evaluation APIs are disabled for company-private workflows."
         )
-    for config in enabled_configs():
+    for config in _ordered_configs(enabled_configs()):
         try:
             result = _attempt(
                 config, prompt=prompt, response_schema=response_schema,
@@ -314,7 +401,7 @@ def generate_text(prompt: str, *, system_instruction: str | None = None) -> str:
         raise FreeAPIError(
             "Free evaluation APIs are disabled for unspecified/private text."
         )
-    for config in enabled_configs():
+    for config in _ordered_configs(enabled_configs()):
         try:
             result = _attempt(
                 config, prompt=prompt, response_schema=None,
