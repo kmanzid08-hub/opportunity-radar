@@ -110,3 +110,49 @@ fallback. The scheduled job's secrets are separate from Render's settings.
 
 Tests mock all provider requests and incur no token charges. For real
 end-to-end verification you must supply your own provider keys/limits.
+
+
+## Balanced hourly production schedule (Nov 18, 2026)
+
+Opportunity Radar now alternates which of Groq and NVIDIA gets first priority
+for each eligible **public** source/notice classification. If one provider
+hits RPM/TPM/RPD/TPD, or returns 429/503, the next configured provider is
+attempted. Gemini handles documents that neither free provider can analyze;
+OpenAI is **last resort only**, with model ID `gpt-6-luna`.
+
+The production GitHub Actions schedules use Africa/Kigali local time:
+
+- Website scanning: at minute 00 of every hour, up to **16** due sites per
+  run, prioritizing previously unscanned sites and rotating unfinished sites
+  fairly. The separate Job in Rwanda board runs at 08:00 only.
+- Website discovery: at minute 35 of every second hour, dividing the 49
+  configured Brave searches into 12 deterministic groups of about 4-5
+  queries. Every search is covered once per Kigali day.
+- Shared GitHub Actions concurrency ensures scan and discovery do not race.
+- A successful website updates its checkpoint; incomplete AI processing
+  remains eligible for another hourly scan.
+
+**Persistent budget:** the existing PostgreSQL `beta_usage` table tracks
+minute request counts/tokens and UTC daily request counts/tokens per provider.
+Counters persist across GitHub runs and Render web instances, and are
+updated atomically with an advisory transaction lock. In-process rolling
+counters add additional pacing. Reservations count maximum output tokens
+conservatively, including unsuccessful requests; quota measurements returned
+by providers are logged without private request text. This avoids treating
+every hourly job as a fresh free allocation. It is not a guarantee that the
+provider's exact rate-limit algorithm matches our conservative counters.
+
+Groq and NVIDIA are automatically eligible in scheduled GitHub Actions
+**only when their corresponding secret is present**, and their enable
+variables are either true or left unset. Explicit `false` disables them.
+The provider-specific rate caps remain configurable but must not exceed
+the account's actual granted limits.
+
+Changing the scheduled GitHub Actions timing does **not** bypass daily
+quotas. The number of sites crawled in 24 hours is still subject to provider
+capacity and the AI quality safeguards. Never expect free NVIDIA prototype
+credits or a free-tier Groq allocation to cover unlimited high-volume
+production.
+
+All qualification decisions, company match thresholds, and privacy
+constraints are unchanged.
