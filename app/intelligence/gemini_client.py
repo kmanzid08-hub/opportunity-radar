@@ -206,8 +206,10 @@ class GeminiClient:
         # every notice. The circuit applies only when the paid backup is
         # explicitly configured, so offline/normal Gemini behavior remains
         # unchanged. The callback still runs on the actual backup request.
-        from app.intelligence import openai_fallback
-        backup_available = openai_fallback.fallback_enabled()
+        from app.intelligence import openai_fallback, free_api_fallback
+        backup_available = (
+            openai_fallback.fallback_enabled() or free_api_fallback.any_enabled()
+        )
         if backup_available:
             unavailable = PROVIDER_CIRCUIT.unavailable()
             if unavailable is not None:
@@ -290,11 +292,18 @@ class GeminiClient:
             )
         except GeminiAPIError as exc:
             if exc.diagnostic is not None and exc.diagnostic.category in BACKUP_CATEGORIES:
-                from app.intelligence import openai_fallback
+                from app.intelligence import free_api_fallback, openai_fallback
 
+                if free_api_fallback.any_enabled():
+                    try:
+                        return free_api_fallback.generate_text(
+                            prompt, system_instruction=system_instruction
+                        )
+                    except free_api_fallback.FreeAPIError:
+                        logger.info("Community API could not complete text request")
                 if openai_fallback.fallback_enabled():
                     logger.warning(
-                        "Gemini temporarily unavailable category=%s; switching to configured OpenAI backup for text",
+                        "Gemini unavailable category=%s; trying configured OpenAI backup for text",
                         exc.diagnostic.category,
                     )
                     try:
@@ -303,7 +312,7 @@ class GeminiClient:
                         )
                     except openai_fallback.OpenAIFallbackError:
                         raise GeminiAPIError(
-                            "Both Gemini and OpenAI backup are unavailable.",
+                            "All enabled AI providers are unavailable.",
                             diagnostic=exc.diagnostic,
                         ) from None
             raise
@@ -349,11 +358,24 @@ class GeminiClient:
             )
         except GeminiAPIError as exc:
             if exc.diagnostic is not None and exc.diagnostic.category in BACKUP_CATEGORIES:
-                from app.intelligence import openai_fallback
+                from app.intelligence import free_api_fallback, openai_fallback
 
+                if free_api_fallback.any_enabled():
+                    try:
+                        return free_api_fallback.generate_structured(
+                            prompt,
+                            response_schema,
+                            system_instruction=system_instruction,
+                            before_attempt=before_attempt,
+                        )
+                    except free_api_fallback.FreeAPIError:
+                        logger.info(
+                            "Community API exhausted or unavailable for %s",
+                            self._stage(operation),
+                        )
                 if openai_fallback.fallback_enabled():
                     logger.warning(
-                        "Gemini temporarily unavailable category=%s; switching to configured OpenAI backup for %s",
+                        "Gemini unavailable category=%s; trying configured OpenAI backup for %s",
                         exc.diagnostic.category,
                         self._stage(operation),
                     )
@@ -366,7 +388,7 @@ class GeminiClient:
                         )
                     except openai_fallback.OpenAIFallbackError:
                         raise GeminiAPIError(
-                            "Both Gemini and OpenAI backup are unavailable.",
+                            "All enabled AI providers are unavailable.",
                             diagnostic=exc.diagnostic,
                         ) from None
             raise
