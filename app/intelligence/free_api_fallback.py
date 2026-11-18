@@ -277,6 +277,18 @@ def generate_structured(
 ) -> ResponseModel:
     if not prompt.strip():
         raise ValueError("Fallback prompt must not be blank.")
+    # Public-source classification is the default allowed use. CompanyMatch,
+    # TriageResult, and readiness prompts include proprietary workspace
+    # capabilities, personnel or bid information; never send those to free
+    # evaluation services without a second explicit privacy decision.
+    public_schemas = {"SourceAnalysis", "OpportunityAnalysis"}
+    if response_schema.__name__ not in public_schemas and (
+        os.getenv("COMMUNITY_API_ALLOW_COMPANY_DATA", "").strip().lower()
+        not in {"true", "1", "yes", "on"}
+    ):
+        raise FreeAPIError(
+            "Free evaluation APIs are disabled for company-private workflows."
+        )
     for config in enabled_configs():
         try:
             result = _attempt(
