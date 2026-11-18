@@ -40,7 +40,7 @@
 
   <section class="explore-section" id="opportunities" aria-labelledby="opportunity-heading">
     <div class="results-head results-head-prominent">
-      <div><p class="eyebrow">CURATED FOR YOU</p><h2 id="opportunity-heading">{% if selected_deadline == 'archived' %}Archived opportunities{% else %}Your opportunities{% endif %}</h2><p class="results-subtitle">{{ filtered_total }} verified match{% if filtered_total != 1 %}es{% endif %}, ready for your review.</p></div>
+      <div><p class="eyebrow">{% if selected_deadline == 'archived' %}ARCHIVED OPPORTUNITIES{% else %}Active matches{% endif %}</p><h2 id="opportunity-heading">{% if selected_deadline == 'archived' %}Archived opportunities{% else %}Your opportunities{% endif %}</h2><p class="results-subtitle">{{ filtered_total }} verified match{% if filtered_total != 1 %}es{% endif %}, ready for your review.</p></div>
       <a class="subtle-link" href="/assessments">View assessments <span aria-hidden="true">↗</span></a>
     </div>
 
