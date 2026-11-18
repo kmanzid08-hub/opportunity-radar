@@ -306,6 +306,14 @@ def generate_structured(
 def generate_text(prompt: str, *, system_instruction: str | None = None) -> str:
     if not prompt.strip():
         raise ValueError("Fallback prompt must not be blank.")
+    # Generic text requests have no schema identifying whether their
+    # content is public. Fail closed to protect company and user data.
+    if os.getenv("COMMUNITY_API_ALLOW_COMPANY_DATA", "").strip().lower() not in {
+        "true", "1", "yes", "on",
+    }:
+        raise FreeAPIError(
+            "Free evaluation APIs are disabled for unspecified/private text."
+        )
     for config in enabled_configs():
         try:
             result = _attempt(
