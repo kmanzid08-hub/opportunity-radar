@@ -365,6 +365,16 @@ def run_scanner() -> None:
     }:
         scanners = [item for item in scanners if isinstance(item, CompanyWebsiteScanner)]
         print("Recovery mode: retrying only unfinished publisher scans", flush=True)
+    elif os.getenv("HOURLY_SCAN_MODE", "").strip().lower() in {
+        "true", "1", "yes", "on"
+    }:
+        # Job boards are separately crawled once daily, not every hour.
+        from zoneinfo import ZoneInfo
+        local_hour = datetime.now(timezone.utc).astimezone(
+            ZoneInfo("Africa/Kigali")
+        ).hour
+        if local_hour != 8:
+            scanners = [item for item in scanners if isinstance(item, CompanyWebsiteScanner)]
     try:
         company_profiles = load_active_company_profiles(None)
     except Exception as exc:
