@@ -1,0 +1,39 @@
+name: Verify hourly quotas and AI routing
+on:
+  push:
+    branches:
+      - feature/hourly-quotas-balanced-routing-20261118
+      - global-saas-development
+  pull_request:
+    branches:
+      - global-saas-development
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: pip install -r requirements.txt
+      - name: Verify per-provider quotas, failover and hourly batching
+        run: |
+          python -m compileall -q app tests
+          python -m pytest -q \
+            tests/test_free_api_fallback.py \
+            tests/test_openai_fallback.py \
+            tests/unit/test_daily_source_scan.py \
+            tests/unit/test_scheduled_discovery.py \
+            tests/unit/test_source_discovery_metrics.py \
+            tests/integration/test_resumable_website_scan.py
+      - name: Complete baseline-clean test suite
+        run: |
+          python -m pytest -q \
+            --ignore=tests/unit/intelligence/test_applicant_entailment.py \
+            --ignore=tests/unit/intelligence/test_evidence_policy.py \
+            --ignore=tests/unit/intelligence/test_phase9m_policy.py
