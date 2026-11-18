@@ -1,190 +1,143 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Discover | Opportunity Radar</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='/phase4.css') }}?v=5">
-    <script src="/static/beta.js?v=5" defer></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f8fb">
+  <title>Discover | Opportunity Radar</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/phase4.css') }}?v=5">
+  <script src="/static/beta.js?v=5" defer></script>
 </head>
-<body>
-    {% include '_app_header.html' %}
+<body class="discover-page">
+{% include '_app_header.html' %}
+<main id="main-content" class="page-shell">
+  <header class="welcome-hero">
+    <div class="welcome-hero-copy">
+      <p class="eyebrow"><span class="live-indicator"></span> YOUR OPPORTUNITY WORKSPACE</p>
+      <h1>Find your next <span class="gradient-text">big opportunity.</span></h1>
+      <p class="lede">{% if selected_company_id %}A clear view of the best opportunities for {{ business_profile_name }}.{% else %}The right opportunities, already filtered for your business.{% endif %}</p>
+      <div class="hero-quick-actions">
+        <a href="#opportunities" class="button">Explore matches <span aria-hidden="true">↗</span></a>
+        <a href="/analyze" class="button secondary">Analyze a tender</a>
+      </div>
+    </div>
+    <div class="hero-illustration" aria-hidden="true">
+      <div class="hero-orbit hero-orbit-one"></div>
+      <div class="hero-orbit hero-orbit-two"></div>
+      <div class="hero-orbit hero-orbit-three"></div>
+      <div class="hero-center"><span>✦</span></div>
+      <div class="hero-signal hero-signal-top"></div>
+      <div class="hero-signal hero-signal-bottom"></div>
+    </div>
+  </header>
 
-    <main id="main-content" class="page-shell">
-        <header class="page-header">
-            <div>
-                <p class="eyebrow">Opportunity intelligence</p>
-                <h1>Discover</h1>
-                <p class="lede">
-                    {% if selected_company_id %}
-                    Stored matches for {{ business_profile_name }}.
-                    {% else %}
-                    The strongest verified opportunities across all active companies.
-                    {% endif %}
-                </p>
+  <section class="metrics metrics-discover" aria-label="Opportunity summary">
+    <div class="metric metric-highlight"><span class="label">Strong matches</span><strong>{{ strong_match_count }}</strong><span class="metric-note">Worth a closer look</span></div>
+    <div class="metric"><span class="label">New today</span><strong>{{ dashboard_metrics.new_today }}</strong><span class="metric-note">Just discovered</span></div>
+    <div class="metric"><span class="label">Closing soon</span><strong>{{ dashboard_metrics.expiring_soon }}</strong><span class="metric-note">Keep an eye on deadlines</span></div>
+    <div class="metric"><span class="label">In your pipeline</span><strong>{{ dashboard_metrics.pipeline }}</strong><span class="metric-note">Opportunities you're tracking</span></div>
+  </section>
+
+  <section class="explore-section" id="opportunities" aria-labelledby="opportunity-heading">
+    <div class="results-head results-head-prominent">
+      <div><p class="eyebrow">CURATED FOR YOU</p><h2 id="opportunity-heading">{% if selected_deadline == 'archived' %}Archived opportunities{% else %}Your opportunities{% endif %}</h2><p class="results-subtitle">{{ filtered_total }} verified match{% if filtered_total != 1 %}es{% endif %}, ready for your review.</p></div>
+      <a class="subtle-link" href="/assessments">View assessments <span aria-hidden="true">↗</span></a>
+    </div>
+
+    <section class="toolbar smart-toolbar" aria-label="Opportunity filters">
+      <form action="/" method="get" class="smart-filter-form">
+        <label class="field search-field">
+          <span class="visually-hidden">Search</span>
+          <span class="search-input-wrap"><svg viewBox="0 0 24 24" aria-hidden="true" class="ui-icon"><circle cx="10.8" cy="10.8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 5 5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg><input type="search" name="q" value="{{ selected_q }}" placeholder="Search by tender, buyer or service" aria-label="Search opportunities"></span>
+        </label>
+        <label class="field filter-company"><span class="visually-hidden">Company</span><select name="company_id" aria-label="Filter by company"><option value="">All companies</option>{% for company in companies %}<option value="{{ company.id }}" {% if selected_company_id == company.id %}selected{% endif %}>{{ company.name }}</option>{% endfor %}</select></label>
+        <label class="field filter-deadline"><span class="visually-hidden">Deadline</span><select name="deadline_filter" aria-label="Filter by deadline"><option value="">Current</option><option value="due_7_days" {% if selected_deadline == 'due_7_days' %}selected{% endif %}>Closing this week</option><option value="due_30_days" {% if selected_deadline == 'due_30_days' %}selected{% endif %}>Next 30 days</option><option value="no_deadline" {% if selected_deadline == 'no_deadline' %}selected{% endif %}>No deadline</option><option value="archived" {% if selected_deadline == 'archived' %}selected{% endif %}>Archived</option><option value="expired" {% if selected_deadline == 'expired' %}selected{% endif %}>Expired</option></select></label>
+        <button class="button filter-submit" type="submit">Find matches</button>
+        <details class="advanced-filters" data-advanced-filters {% if selected_country or selected_category or selected_match_strength or selected_status %}open{% endif %}>
+          <summary>More filters <span aria-hidden="true">⌄</span></summary>
+          <div class="advanced-filter-grid">
+            <label class="field"><span>Country</span><select name="country"><option value="">All countries</option>{% for country in countries %}<option value="{{ country }}" {% if selected_country == country %}selected{% endif %}>{{ country }}</option>{% endfor %}</select></label>
+            <label class="field"><span>Opportunity type</span><select name="category"><option value="">All types</option>{% for category in categories %}<option value="{{ category }}" {% if selected_category == category %}selected{% endif %}>{{ category.replace('_', ' ').title() }}</option>{% endfor %}</select></label>
+            <label class="field"><span>Match strength</span><select name="match_strength"><option value="">All strengths</option>{% for strength in match_strengths %}<option value="{{ strength }}" {% if selected_match_strength == strength %}selected{% endif %}>{{ strength.replace('_', ' ').title() }}</option>{% endfor %}</select></label>
+            <label class="field"><span>Status</span><select name="status"><option value="">All statuses</option>{% for status in statuses %}<option value="{{ status }}" {% if selected_status == status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select></label>
+            <div class="advanced-filter-actions"><a class="subtle-link" href="/">Clear all filters</a><button class="button secondary" type="submit">Apply filters</button></div>
+          </div>
+        </details>
+      </form>
+    </section>
+
+    {% if opportunities %}
+    <section class="opportunity-list opportunity-card-grid" aria-label="Matched opportunities">
+      {% for opportunity in opportunities %}
+      <article class="opportunity-row opportunity-card">
+        <div class="opportunity-card-main">
+          <div class="opportunity-card-top">
+            <span class="opportunity-type">{{ opportunity.ai_opportunity_type.replace('_', ' ').title() }}</span>
+            {% if opportunity.display_triage and opportunity.display_triage.urgency.value == 'HIGH' %}<span class="urgency-pill">Time sensitive</span>{% elif opportunity.status == 'New' %}<span class="status-pill">New</span>{% endif %}
+          </div>
+          <h3 class="opportunity-title"><a href="/opportunities/{{ opportunity.id }}?company_id={{ opportunity.display_match_company_id }}">{{ opportunity.ai_title or opportunity.title }}</a></h3>
+          <p class="opportunity-summary">{{ opportunity.ai_summary or opportunity.description or 'A verified opportunity is available for review.' }}</p>
+          <div class="opportunity-meta">
+            <span>{{ opportunity.ai_buyer or opportunity.organisation_name or 'Buyer not identified' }}</span>
+            <span>{{ opportunity.ai_geography }}</span>
+            <span>{% if opportunity.deadline %}Closes {{ opportunity.deadline.strftime('%d %b %Y') }}{% else %}No published deadline{% endif %}</span>
+          </div>
+          {% if opportunity.display_match_company_name %}<p class="company-match-tag"><span aria-hidden="true">✦</span> {{ opportunity.display_match_company_name }}</p>{% endif %}
+          <details class="match-details">
+            <summary>Why this fits <span aria-hidden="true">⌄</span></summary>
+            <div class="match-details-body">
+              <p><strong>Applicant eligibility: {{ opportunity.display_applicant_eligibility or 'UNKNOWN' }}</strong> — {{ opportunity.ai_applicant_eligibility_note }}</p>
+              {% if opportunity.display_match_reason %}<p><strong>Capability assessment (not proof of eligibility):</strong> {{ opportunity.display_match_reason }}</p>{% endif %}
+              {% if opportunity.display_mandatory_checks %}<p><strong>Before pursuing:</strong> {{ opportunity.display_mandatory_checks[:2] | join(' ') }}</p>{% endif %}
+              {% if opportunity.display_match_gaps %}<p><strong>Potential gaps:</strong> {{ opportunity.display_match_gaps | join('; ') }}</p>{% endif %}
+              {% if opportunity.display_eligibility_concerns %}<p><strong>Eligibility concerns:</strong> {{ opportunity.display_eligibility_concerns | join('; ') }}</p>{% endif %}
+              {% if opportunity.display_readiness %}<p>Bid readiness: {{ opportunity.display_readiness.overall_status.value.replace('_', ' ').title() }} · {{ opportunity.display_readiness.missing_count + opportunity.display_readiness.confirmation_count }} items outstanding</p>{% endif %}
             </div>
-            <div class="button-row" aria-label="Discovery actions">
-                {% if not request.state.user %}<form action="/scan" method="post"><input type="hidden" name="csrf_token" value="{{ request.state.csrf }}"><button class="button" type="submit">Run scan</button></form>{% endif %}<a class="button" href="/analyze">Analyze an opportunity</a><a class="button secondary" href="/assessments">Submitted assessments</a>
-            </div>
-        </header>
-
-        <section class="metrics" aria-label="Opportunity summary">
-            <div class="metric"><span class="label">New today</span><strong>{{ dashboard_metrics.new_today }}</strong></div>
-            <div class="metric"><span class="label">Strong matches</span><strong>{{ strong_match_count }}</strong></div>
-            <div class="metric"><span class="label">Closing soon</span><strong>{{ dashboard_metrics.expiring_soon }}</strong></div>
-            <div class="metric"><span class="label">Pipeline</span><strong>{{ dashboard_metrics.pipeline }}</strong></div>
-        </section>
-
-        <section class="toolbar" aria-label="Opportunity filters">
-            <form action="/" method="get" class="filter-grid">
-                <label class="field search-field">
-                    <span>Search</span>
-                    <input type="search" name="q" value="{{ selected_q }}" placeholder="Title, buyer, service">
-                </label>
-                <label class="field">
-                    <span>Company</span>
-                    <select name="company_id">
-                        <option value="">All companies</option>
-                        {% for company in companies %}
-                        <option value="{{ company.id }}" {% if selected_company_id == company.id %}selected{% endif %}>{{ company.name }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-                <label class="field">
-                    <span>Country</span>
-                    <select name="country">
-                        <option value="">All countries</option>
-                        {% for country in countries %}
-                        <option value="{{ country }}" {% if selected_country == country %}selected{% endif %}>{{ country }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-                <label class="field">
-                    <span>Opportunity type</span>
-                    <select name="category">
-                        <option value="">All types</option>
-                        {% for category in categories %}
-                        <option value="{{ category }}" {% if selected_category == category %}selected{% endif %}>{{ category.replace('_', ' ').title() }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-                <label class="field">
-                    <span>Deadline</span>
-                    <select name="deadline_filter">
-                        <option value="">Current</option>
-                        <option value="due_7_days" {% if selected_deadline == 'due_7_days' %}selected{% endif %}>Next 7 days</option>
-                        <option value="due_30_days" {% if selected_deadline == 'due_30_days' %}selected{% endif %}>Next 30 days</option>
-                        <option value="no_deadline" {% if selected_deadline == 'no_deadline' %}selected{% endif %}>No deadline</option>
-                        <option value="archived" {% if selected_deadline == 'archived' %}selected{% endif %}>Archived</option>
-                        <option value="expired" {% if selected_deadline == 'expired' %}selected{% endif %}>Expired</option>
-                    </select>
-                </label>
-                <label class="field">
-                    <span>Match</span>
-                    <select name="match_strength">
-                        <option value="">All strengths</option>
-                        {% for strength in match_strengths %}
-                        <option value="{{ strength }}" {% if selected_match_strength == strength %}selected{% endif %}>{{ strength.replace('_', ' ').title() }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-                <label class="field">
-                    <span>Status</span>
-                    <select name="status">
-                        <option value="">All statuses</option>
-                        {% for status in statuses %}
-                        <option value="{{ status }}" {% if selected_status == status %}selected{% endif %}>{{ status }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-                <div class="button-row">
-                    <button class="button" type="submit">Apply</button>
-                    <a class="button secondary" href="/">Clear</a>
-                </div>
-            </form>
-        </section>
-
-        <div class="results-head">
-            <div><h2>{% if selected_deadline == 'archived' %}Archived opportunities{% else %}Active matches{% endif %}</h2><p>{{ filtered_total }} result{% if filtered_total != 1 %}s{% endif %}</p></div>
-            <p>Sources scanned today: {{ dashboard_metrics.sources_scanned_today }} · Scan success: {{ dashboard_metrics.scan_success_rate }}%</p>
+          </details>
         </div>
-
-        {% if opportunities %}
-        <p class="quiet">Ordered by priority, match strength and score, deadline, then newest. Untriaged results appear before low priority.</p>
-        <section class="opportunity-list" aria-label="Matched opportunities">
-            {% for opportunity in opportunities %}
-            <article class="opportunity-row">
-                <div aria-label="Technical capability match score {{ opportunity.display_match_score }}">
-                    <div class="score">{{ opportunity.display_match_score }}</div>
-                    <span class="score-caption">Technical fit: {{ (opportunity.display_match_strength or 'match').replace('_', ' ').title() }}</span>
-                </div>
-                <div>
-                    <span class="status-pill">{{ opportunity.status }}</span>
-                    {% if opportunity.display_mandatory_checks %}
-                    <span class="status-pill">Bid decision: Verify eligibility</span>
-                    {% endif %}
-                    {% if opportunity.display_triage %}
-                    <span class="status-pill">Priority: {{ opportunity.display_triage.priority.value.replace('_', ' ').title() }}</span>
-                    <span class="quiet">Urgency: {{ opportunity.display_triage.urgency.value.title() }}</span>
-                    {% endif %}
-                    <h3 class="opportunity-title">
-                        <a href="/opportunities/{{ opportunity.id }}?company_id={{ opportunity.display_match_company_id }}">{{ opportunity.ai_title or opportunity.title }}</a>
-                    </h3>
-                    <div class="opportunity-meta">
-                        <span>{{ opportunity.ai_buyer or opportunity.organisation_name or 'Buyer not identified' }}</span>
-                        <span>{{ opportunity.ai_geography }}</span>
-                        <span>{{ opportunity.ai_opportunity_type.replace('_', ' ').title() }}</span>
-                        <span>{% if opportunity.deadline %}Closes {{ opportunity.deadline.strftime('%d %b %Y') }}{% else %}No published deadline{% endif %}</span>
-                        <span>{{ opportunity.display_match_company_name }}</span>
-                    </div>
-                    <p class="opportunity-summary">{{ opportunity.ai_summary or opportunity.description or 'A verified opportunity is available for review.' }}</p>
-                    {% if opportunity.display_readiness %}
-                    <p class="quiet">Bid readiness: {{ opportunity.display_readiness.overall_status.value.replace('_', ' ').title() }} · {{ opportunity.display_readiness.missing_count + opportunity.display_readiness.confirmation_count }} preparation items outstanding</p>
-                    {% endif %}
-                    <p><strong>Applicant eligibility: {{ opportunity.display_applicant_eligibility or 'UNKNOWN' }}</strong> — {{ opportunity.ai_applicant_eligibility_note }}</p>
-                    {% if opportunity.display_mandatory_checks %}
-                    <p class="quiet"><strong>Before pursuing:</strong> {{ opportunity.display_mandatory_checks[:2] | join(' ') }}</p>
-                    {% endif %}
-                    {% if opportunity.display_match_reason %}<p class="match-reason"><strong>Capability assessment (not proof of eligibility):</strong> {{ opportunity.display_match_reason }}</p>{% endif %}
-                    {% if opportunity.display_match_gaps or opportunity.display_eligibility_concerns %}
-                    <details class="match-details">
-                        <summary>Match details</summary>
-                        {% if opportunity.display_match_gaps %}<p><strong>Potential gaps:</strong> {{ opportunity.display_match_gaps | join('; ') }}</p>{% endif %}
-                        {% if opportunity.display_eligibility_concerns %}<p><strong>Eligibility concerns:</strong> {{ opportunity.display_eligibility_concerns | join('; ') }}</p>{% endif %}
-                    </details>
-                    {% endif %}
-                </div>
-                <div class="row-actions">
-                    <a class="button" href="/opportunities/{{ opportunity.id }}?company_id={{ opportunity.display_match_company_id }}">Review</a>
-                    {% if not opportunity.is_lead %}
-                    <form action="/opportunities/{{ opportunity.id }}/pipeline/add" method="post"><input type="hidden" name="csrf_token" value="{{ request.state.csrf }}"><button class="button secondary" type="submit">Add to pipeline</button></form>
-                    {% else %}
-                    <a class="button secondary" href="/pipeline">In pipeline</a>
-                    {% endif %}
-                </div>
-            </article>
-            {% endfor %}
-        </section>
-
-        {% if total_pages > 1 %}
-        <nav class="pagination" aria-label="Opportunity pages">
-            {% if page > 1 %}<a class="button secondary" href="{{ request.url.include_query_params(page=page - 1) }}">Previous</a>{% else %}<span></span>{% endif %}
-            <span class="quiet">Page {{ page }} of {{ total_pages }}</span>
-            {% if page < total_pages %}<a class="button secondary" href="{{ request.url.include_query_params(page=page + 1) }}">Next</a>{% else %}<span></span>{% endif %}
-        </nav>
-        {% endif %}
-        {% else %}
-        {% if not business_profile_active %}
-        <section class="empty-state">
-            <h2>Create your first business profile</h2>
-            <p>Opportunity Radar is discovering and storing notices, but there is no active company to match them against. Add your services, expertise, and preferred opportunities to start receiving qualified recommendations.</p>
-            <a class="button" href="/business-profile?new=true">Create business profile</a>
-            <a class="button secondary" href="/sources">View monitored sources</a>
-        </section>
-        {% else %}
-        <section class="empty-state"><h2>No qualified matches yet</h2><p>Your business is configured, but no current opportunity has passed the match and eligibility requirements. Verify your business preferences or analyze a specific tender.</p><a class="button" href="/business-profile">Review business profile</a><a class="button secondary" href="/analyze">Analyze an opportunity</a></section>
-        {% endif %}
-        {% endif %}
-    </main>
+        <div class="opportunity-card-side">
+          <div class="fit-indicator" aria-label="Technical capability match score {{ opportunity.display_match_score }}">
+            <div class="fit-score"><span class="score">{{ opportunity.display_match_score }}</span><span class="fit-percent">/100</span></div>
+            <span class="score-caption">Technical fit</span>
+            <span class="fit-strength">{{ (opportunity.display_match_strength or 'match').replace('_', ' ').title() }}</span>
+          </div>
+          <div class="row-actions">
+            <a class="button" href="/opportunities/{{ opportunity.id }}?company_id={{ opportunity.display_match_company_id }}">View opportunity <span aria-hidden="true">↗</span></a>
+            {% if not opportunity.is_lead %}
+            <form action="/opportunities/{{ opportunity.id }}/pipeline/add" method="post"><input type="hidden" name="csrf_token" value="{{ request.state.csrf }}"><button class="button secondary" type="submit">＋ Save to pipeline</button></form>
+            {% else %}<a class="button secondary" href="/pipeline">In pipeline <span aria-hidden="true">✓</span></a>{% endif %}
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+    </section>
+    {% if total_pages > 1 %}
+    <nav class="pagination" aria-label="Opportunity pages">
+      {% if page > 1 %}<a class="button secondary" href="{{ request.url.include_query_params(page=page - 1) }}">← Previous</a>{% else %}<span></span>{% endif %}
+      <span class="quiet">Page {{ page }} of {{ total_pages }}</span>
+      {% if page < total_pages %}<a class="button secondary" href="{{ request.url.include_query_params(page=page + 1) }}">Next →</a>{% else %}<span></span>{% endif %}
+    </nav>
+    {% endif %}
+    {% else %}
+    {% if not business_profile_active %}
+    <section class="empty-state">
+      <span class="empty-icon" aria-hidden="true">✦</span>
+      <h2>Create your first business profile</h2>
+      <p>Add what your company does so Opportunity Radar can start bringing you the most relevant opportunities.</p>
+      <a class="button" href="/business-profile?new=true">Create business profile <span aria-hidden="true">↗</span></a>
+      <a class="subtle-link" href="/sources">View monitored sources</a>
+    </section>
+    {% else %}
+    <section class="empty-state">
+      <span class="empty-icon" aria-hidden="true">✦</span>
+      <h2>You're all caught up.</h2>
+      <p>No qualified matches yet. We're continuing to scan for your next opportunity.</p>
+      <div class="button-row" style="justify-content:center"><a class="button" href="/analyze">Analyze a tender</a><a class="button secondary" href="/business-profile">Review business profile</a></div>
+    </section>
+    {% endif %}
+    {% endif %}
+    <p class="feed-health">Sources scanned today: {{ dashboard_metrics.sources_scanned_today }} <span aria-hidden="true">·</span> Scan success: {{ dashboard_metrics.scan_success_rate }}%</p>
+  </section>
+</main>
 </body>
 </html>
