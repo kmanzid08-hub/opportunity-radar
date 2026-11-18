@@ -3,7 +3,7 @@ name: Daily tender scan
 on:
   schedule:
     # Run after daily source discovery; also support an explicit post-discovery scan.
-    - cron: "0 8 * * *"
+    - cron: "0 * * * *"
       timezone: "Africa/Kigali"
   workflow_dispatch:
   # Tagged releases scan newly discovered sources using cached OCR and match both active companies.
@@ -29,16 +29,16 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_FALLBACK_ENABLED: ${{ vars.OPENAI_FALLBACK_ENABLED || 'true' }}
-      OPENAI_FALLBACK_MODEL: ${{ vars.OPENAI_FALLBACK_MODEL || 'gpt-5-mini' }}
+      OPENAI_FALLBACK_MODEL: ${{ vars.OPENAI_FALLBACK_MODEL || 'gpt-6-luna' }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-      GROQ_FALLBACK_ENABLED: ${{ vars.GROQ_FALLBACK_ENABLED || 'false' }}
+      GROQ_FALLBACK_ENABLED: ${{ vars.GROQ_FALLBACK_ENABLED || 'true' }}
       GROQ_FALLBACK_MODEL: ${{ vars.GROQ_FALLBACK_MODEL || 'openai/gpt-oss-120b' }}
       GROQ_FALLBACK_RPM: ${{ vars.GROQ_FALLBACK_RPM || '25' }}
       GROQ_FALLBACK_TPM: ${{ vars.GROQ_FALLBACK_TPM || '7000' }}
       GROQ_FALLBACK_RPD: ${{ vars.GROQ_FALLBACK_RPD || '900' }}
       GROQ_FALLBACK_TPD: ${{ vars.GROQ_FALLBACK_TPD || '180000' }}
       NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
-      NVIDIA_FALLBACK_ENABLED: ${{ vars.NVIDIA_FALLBACK_ENABLED || 'false' }}
+      NVIDIA_FALLBACK_ENABLED: ${{ vars.NVIDIA_FALLBACK_ENABLED || 'true' }}
       NVIDIA_FALLBACK_MODEL: ${{ vars.NVIDIA_FALLBACK_MODEL || 'openai/gpt-oss-20b' }}
       NVIDIA_FALLBACK_RPM: ${{ vars.NVIDIA_FALLBACK_RPM || '32' }}
       NVIDIA_FALLBACK_TPM: ${{ vars.NVIDIA_FALLBACK_TPM || '40000' }}
@@ -48,6 +48,9 @@ jobs:
       AUTOMATION_MODE: "scan"
       ENABLE_INTERNAL_SCHEDULER: "false"
       DAILY_SOURCE_SCAN: 'true'
+      HOURLY_SCAN_MODE: 'true'
+      WEBSITE_SCAN_BATCH_SIZE: '16'
+      AI_SHARED_PROVIDER_BUDGETS: 'true'
       WEBSITE_SCAN_WORKERS: '6'
       WEBSITE_MAX_PAGES_PER_SOURCE: '12'
       WEBSITE_CRAWL_BUDGET_SECONDS: '55'
@@ -94,9 +97,6 @@ jobs:
             echo "::error::DATABASE_URL and GEMINI_API_KEY must be configured as repository Actions secrets."
             exit 1
           fi
-
-      - name: Ensure website discovery completes before daily matching
-        run: python -m app.scheduled_discovery
 
       - name: Scan and qualify newly discovered opportunities with AI
         run: python -m app.automation_run
