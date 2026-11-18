@@ -218,3 +218,33 @@ def test_503_without_opt_in_keeps_existing_bounded_retries(monkeypatch):
     )
     assert client.generate_structured("notice", CheckSchema).value == 42
     assert sdk.models.generate_content.call_count == 2
+
+
+def test_openai_rate_limited_backup_pauses_repeated_attempts(monkeypatch):
+    import openai
+    from app.intelligence import openai_fallback
+    monkeypatch.setenv("OPENAI_FALLBACK_ENABLED", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
+    monkeypatch.setattr(openai_fallback, "_rate_limited_until", 0.0)
+    attempts = []
+
+    class SimulatedRateLimitError(Exception):
+        status_code = 429
+
+    def fail(**kwargs):
+        attempts.append(1)
+        raise SimulatedRateLimitError("mocked")
+
+    monkeypatch.setattr(
+        openai,
+        "OpenAI",
+        lambda **kwargs: SimpleNamespace(
+            responses=SimpleNamespace(parse=fail),
+        ),
+    )
+    with pytest.raises(openai_fallback.OpenAIFallbackError):
+        openai_fallback.generate_structured("first", CheckSchema)
+    with pytest.raises(openai_fallback.OpenAIFallbackError, match="temporarily rate limited"):
+        openai_fallback.generate_structured("second", CheckSchema)
+    assert attempts == [1]
+    assert openai_fallback._rate_limited_until > openai_fallback.time.monotonic()
