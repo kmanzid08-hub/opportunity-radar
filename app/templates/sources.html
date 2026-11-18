@@ -15,25 +15,26 @@
             <div><p class="eyebrow">Discovery coverage</p><h1>Sources</h1><p class="lede">See what is monitored, why it matters, and whether scanning is healthy.</p></div>
         </header>
 
-        {% if request.state.user and request.state.user.is_admin %}<section class="toolbar"><h2>Add a shared source</h2><p class="quiet">Public source catalog entries are visible to every beta workspace. No website fetch or AI analysis occurs when adding a source.</p><form action="/sources/add" method="post" class="filter-grid"><input type="hidden" name="csrf_token" value="{{ request.state.csrf }}"><label class="field"><span>Source name</span><input name="name" required maxlength="255"></label><label class="field"><span>Notices URL</span><input name="url" type="url" required maxlength="2048"></label><button class="button" type="submit">Add source</button></form></section>{% endif %}
+        {% if request.state.user and request.state.user.is_admin %}<details class="toolbar source-management"><summary>Add a website to monitor</summary><div class="source-management-inner"><h2>Add a shared source</h2><p class="quiet">Public source catalog entries are visible to every beta workspace. No website fetch or AI analysis occurs when adding a source.</p><form action="/sources/add" method="post" class="filter-grid"><input type="hidden" name="csrf_token" value="{{ request.state.csrf }}"><label class="field"><span>Source name</span><input name="name" required maxlength="255"></label><label class="field"><span>Notices URL</span><input name="url" type="url" required maxlength="2048"></label><button class="button" type="submit">Add source</button></form></div></details>{% endif %}
 
         {% if request.state.user and request.state.user.is_admin %}
-        <section class="toolbar">
+        <details class="toolbar source-management">
+            <summary>Rwanda source collection</summary><div class="source-management-inner">
             <h2>Rwanda tender discovery</h2>
             <p class="quiet">Add Job in Rwanda tenders and consultancies, The New Times tenders portal, and Rwanda ICT Chamber opportunities to the source catalog. This does not fetch websites or consume AI requests.</p>
             <form action="/sources/add-rwanda" method="post">
                 <input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
                 <button class="button" type="submit">Add Rwanda tender sources</button>
-            </form>
-        </section>
+            </form></div>
+        </details>
         {% endif %}
 
         {% set scan_sources = sources|selectattr('is_active')|selectattr('is_approved')|list %}
-        {% if companies and scan_sources %}<section class="toolbar"><h2>Scan a selected source</h2><p class="quiet">Checks up to three pages. For inaccessible sites, paste the notice text under Analyze an opportunity.</p>
+        {% if companies and scan_sources %}<details class="toolbar source-management"><summary>Scan a specific website</summary><div class="source-management-inner"><h2>Scan a selected source</h2><p class="quiet">Checks up to three pages. For inaccessible sites, paste the notice text under Analyze an opportunity.</p>
         <form action="/scan-source" method="post" class="filter-grid" data-analysis><input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
         <label class="field"><span>Company</span><select name="company_id" required>{% for company in companies %}<option value="{{ company.id }}">{{ company.name }}</option>{% endfor %}</select></label>
         <label class="field"><span>Source</span><select name="source_id" required>{% for source in scan_sources %}<option value="{{ source.id }}">{{ source.organisation_name or source.domain }}</option>{% endfor %}</select></label>
-        <button class="button" type="submit">Scan selected source</button><p role="status" data-progress></p></form></section>{% endif %}
+        <button class="button" type="submit">Scan selected source</button><p role="status" data-progress></p></form></div></details>{% endif %}
 
         <section class="metrics" aria-label="Source summary">
             <div class="metric"><span class="label">Sources</span><strong>{{ source_count }}</strong></div>
