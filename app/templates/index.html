@@ -86,6 +86,8 @@
           <details class="match-details">
             <summary>Why this fits <span aria-hidden="true">⌄</span></summary>
             <div class="match-details-body">
+              {% if opportunity.display_triage %}<p><strong>Priority: {{ opportunity.display_triage.priority.value.replace('_', ' ').title() }}</strong> · Urgency: {{ opportunity.display_triage.urgency.value.title() }}</p>{% endif %}
+              {% if opportunity.display_mandatory_checks %}<p><strong>Bid decision: Verify eligibility</strong></p>{% endif %}
               <p><strong>Applicant eligibility: {{ opportunity.display_applicant_eligibility or 'UNKNOWN' }}</strong> — {{ opportunity.ai_applicant_eligibility_note }}</p>
               {% if opportunity.display_match_reason %}<p><strong>Capability assessment (not proof of eligibility):</strong> {{ opportunity.display_match_reason }}</p>{% endif %}
               {% if opportunity.display_mandatory_checks %}<p><strong>Before pursuing:</strong> {{ opportunity.display_mandatory_checks[:2] | join(' ') }}</p>{% endif %}
