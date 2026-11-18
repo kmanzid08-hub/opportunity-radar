@@ -4,24 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Discover | Opportunity Radar</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='/phase4.css') }}?v=1">
-    <script src="/static/beta.js" defer></script>
+    <link rel="stylesheet" href="{{ url_for('static', path='/phase4.css') }}?v=5">
+    <script src="/static/beta.js?v=5" defer></script>
 </head>
 <body>
-    <header class="app-header">
-        <div class="app-header-inner">
-            <a class="brand" href="/"><span class="brand-mark">OR</span><span>Opportunity Radar</span></a>
-            <nav class="main-nav" aria-label="Primary navigation">
-                <a href="/" class="nav-link active" aria-current="page">Discover</a>
-                <a href="/pipeline" class="nav-link">Pipeline</a>
-                <a href="/business-profile" class="nav-link">Companies</a>
-                <a href="/sources" class="nav-link">Sources</a>
-                <a href="/settings" class="nav-link">Account</a>
-            </nav>
-        </div>
-    </header>
+    {% include '_app_header.html' %}
 
-    <main class="page-shell">
+    <main id="main-content" class="page-shell">
         <header class="page-header">
             <div>
                 <p class="eyebrow">Opportunity intelligence</p>
