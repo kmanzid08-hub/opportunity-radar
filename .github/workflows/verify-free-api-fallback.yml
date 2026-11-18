@@ -1,7 +1,7 @@
 name: Verify free-provider fallback and token budgets
 on:
   push:
-    branches: [feature/groq-nvidia-rate-limited-fallback-20261118]
+    branches: [feature/groq-nvidia-rate-limited-fallback-20261118, global-saas-development]
   pull_request:
     branches: [global-saas-development]
   workflow_dispatch:
