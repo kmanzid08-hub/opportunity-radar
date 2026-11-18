@@ -7,7 +7,7 @@
 
 {% if request.state.user.is_admin %}
 <section class="detail-section">
-<h2>Your team</h2>
+<h2>Team members</h2>
 <p>Invite a person by email. They will set their own password using a one-time invitation code. Invitations expire after 48 hours. New accounts have standard member permissions, not administrator access.</p>
 {% if team_error %}<p role="alert">{{ team_error }}</p>{% endif %}
 {% if team_message %}<p role="status">{{ team_message }}</p>{% endif %}
