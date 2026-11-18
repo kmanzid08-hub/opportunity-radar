@@ -312,7 +312,7 @@ class GeminiClient:
                         )
                     except openai_fallback.OpenAIFallbackError:
                         raise GeminiAPIError(
-                            "All enabled AI providers are unavailable.",
+                            "Both Gemini and OpenAI backup are unavailable.",
                             diagnostic=exc.diagnostic,
                         ) from None
             raise
@@ -388,7 +388,7 @@ class GeminiClient:
                         )
                     except openai_fallback.OpenAIFallbackError:
                         raise GeminiAPIError(
-                            "All enabled AI providers are unavailable.",
+                            "Both Gemini and OpenAI backup are unavailable.",
                             diagnostic=exc.diagnostic,
                         ) from None
             raise
