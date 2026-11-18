@@ -560,6 +560,60 @@ def _run_country_discovery(
     return summary
 
 
+def _run_sharded_discovery() -> int:
+    """Run one of 12 two-hour slots; durable state prevents duplicate slots.
+
+    On success, only this slot is marked complete. A failed query in a slot
+    can be re-attempted without repeating other slots.
+    """
+    now = _utc_now()
+    kigali = ZoneInfo("Africa/Kigali")
+    local = now.astimezone(kigali)
+    slot = local.hour // 2
+    slot_name = f"website_discovery_slot_{local.date().isoformat()}_{slot}"
+    with SessionLocal() as db:
+        previous = db.get(AutomationJobState, slot_name)
+        if previous is not None and previous.last_success_at is not None:
+            print(f"Website discovery slot {slot} already completed today")
+            return 0
+    print(f"Sharded website discovery: slot={slot}/12 date={local.date()}", flush=True)
+    original = os.environ.get("DISCOVERY_SHARD_INDEX")
+    os.environ["DISCOVERY_SHARD_INDEX"] = str(slot)
+    try:
+        countries = _discovery_countries()
+        summary = _run_country_discovery(countries)
+    finally:
+        if original is None:
+            os.environ.pop("DISCOVERY_SHARD_INDEX", None)
+        else:
+            os.environ["DISCOVERY_SHARD_INDEX"] = original
+    attempted = int(summary.get("queries_executed", 0))
+    failed = int(summary.get("failed_queries", 0))
+    if attempted == 0 or failed >= attempted:
+        raise RuntimeError("Website discovery slot failed; will retry next time")
+    with SessionLocal() as db:
+        state = db.get(AutomationJobState, slot_name)
+        if state is None:
+            state = AutomationJobState(
+                job_name=slot_name, last_success_at=_utc_now()
+            )
+            db.add(state)
+        else:
+            state.last_success_at = _utc_now()
+        # Prune old slot states so the table does not grow forever.
+        from sqlalchemy import delete
+        cutoff = (local.date() - timedelta(days=14)).isoformat()
+        db.execute(
+            delete(AutomationJobState).where(
+                AutomationJobState.job_name.like("website_discovery_slot_%"),
+                AutomationJobState.job_name < f"website_discovery_slot_{cutoff}",
+            )
+        )
+        db.commit()
+    print(f"Sharded website discovery slot {slot} completed", flush=True)
+    return 0
+
+
 def main() -> int:
     """
     Execute Website Discovery when due.
@@ -571,6 +625,10 @@ def main() -> int:
     force_discovery = (
         _force_discovery_enabled()
     )
+    if os.getenv("DISCOVERY_SHARDED", "").strip().lower() in {
+        "true", "1", "yes", "on"
+    } and not force_discovery:
+        return _run_sharded_discovery()
 
     now = (
         _utc_now()

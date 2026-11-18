@@ -198,7 +198,8 @@ def test_workflow_discovers_daily_and_can_be_forced_explicitly() -> None:
         / "website-discovery.yml"
     ).read_text(encoding="utf-8")
 
-    assert 'cron: "20 4 * * *"' in workflow
+    assert 'cron: "35 */2 * * *"' in workflow
+    assert 'DISCOVERY_SHARDED:' in workflow
     assert "workflow_dispatch:" in workflow
     assert "FORCE_WEBSITE_DISCOVERY:" in workflow
     assert "github.event_name == 'workflow_dispatch'" in workflow
@@ -271,3 +272,55 @@ def test_all_failed_brave_queries_do_not_advance_success_clock(
     with pytest.raises(RuntimeError, match="no search query completed"):
         scheduled_discovery.main()
     record_success.assert_not_called()
+
+
+def test_two_hour_shard_is_idempotent_and_preserves_other_slots(
+    monkeypatch: pytest.MonkeyPatch, isolated_session_factory
+) -> None:
+    from app.models import AutomationJobState
+
+    monkeypatch.setenv("DISCOVERY_SHARDED", "true")
+    monkeypatch.setenv("FORCE_WEBSITE_DISCOVERY", "false")
+    monkeypatch.setattr(
+        scheduled_discovery, "SessionLocal", isolated_session_factory
+    )
+    when = datetime(2026, 11, 18, 9, 10, tzinfo=timezone.utc)
+    monkeypatch.setattr(scheduled_discovery, "_utc_now", lambda: when)
+    monkeypatch.setattr(scheduled_discovery, "_discovery_countries", lambda: ["Rwanda"])
+    from unittest.mock import Mock
+    run = Mock(return_value={"queries_executed": 4, "failed_queries": 0})
+    monkeypatch.setattr(scheduled_discovery, "_run_country_discovery", run)
+    assert scheduled_discovery.main() == 0
+    assert scheduled_discovery.main() == 0
+    run.assert_called_once_with(["Rwanda"])
+    with isolated_session_factory() as db:
+        names = [
+            row.job_name
+            for row in db.query(AutomationJobState).all()
+        ]
+        assert "website_discovery_slot_2026-11-18_5" in names
+
+
+def test_failed_shard_remains_due(
+    monkeypatch: pytest.MonkeyPatch, isolated_session_factory
+) -> None:
+    from app.models import AutomationJobState
+
+    monkeypatch.setenv("DISCOVERY_SHARDED", "true")
+    monkeypatch.setenv("FORCE_WEBSITE_DISCOVERY", "false")
+    monkeypatch.setattr(
+        scheduled_discovery, "SessionLocal", isolated_session_factory
+    )
+    monkeypatch.setattr(
+        scheduled_discovery, "_utc_now",
+        lambda: datetime(2026, 11, 18, 9, tzinfo=timezone.utc),
+    )
+    monkeypatch.setattr(scheduled_discovery, "_discovery_countries", lambda: ["Rwanda"])
+    monkeypatch.setattr(
+        scheduled_discovery, "_run_country_discovery",
+        lambda _countries: {"queries_executed": 4, "failed_queries": 4},
+    )
+    with pytest.raises(RuntimeError, match="slot failed"):
+        scheduled_discovery.main()
+    with isolated_session_factory() as db:
+        assert db.query(AutomationJobState).count() == 0

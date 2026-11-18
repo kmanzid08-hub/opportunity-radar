@@ -343,6 +343,22 @@ class GeminiClient:
         system_instruction: str | None = None,
         before_attempt: Callable[[], None] | None = None,
     ) -> StructuredResponse:
+        # For public publisher/notice classification, distribute work across
+        # both configured community providers BEFORE calling Gemini. A depleted
+        # free-tier request falls through without network or data loss.
+        from app.intelligence import free_api_fallback
+        if response_schema.__name__ in {"SourceAnalysis", "OpportunityAnalysis"}:
+            if free_api_fallback.any_enabled():
+                try:
+                    return free_api_fallback.generate_structured(
+                        prompt, response_schema,
+                        system_instruction=system_instruction,
+                        before_attempt=before_attempt,
+                    )
+                except free_api_fallback.FreeAPIError:
+                    # Gemini then handles unsupported/over-budget evidence;
+                    # OpenAI remains the last resort on provider outages.
+                    pass
         operation = {
             "SourceAnalysis": "source analysis",
             "OpportunityAnalysis": "opportunity analysis",

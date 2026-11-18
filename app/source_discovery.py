@@ -367,7 +367,9 @@ class SourceDiscovery:
             "true", "1", "yes", "on"
         }:
             try:
-                self._retry_failed_source_analyses()
+                self._retry_failed_source_analyses(
+                    limit=3 if os.getenv("DISCOVERY_SHARD_INDEX") else 12
+                )
             except Exception as exc:
                 # A failed recovery pass must not block new Brave discovery.
                 print(
@@ -382,6 +384,27 @@ class SourceDiscovery:
             )
             for category in self.DISCOVERY_CATEGORIES
         )
+        # Twelve predictable two-hour slices cover EVERY search query once
+        # per Rwanda day without bursting all requests in one 20-minute run.
+        # Unsharded, manual discovery is unchanged.
+        shard_text = os.getenv("DISCOVERY_SHARD_INDEX", "").strip()
+        if shard_text:
+            try:
+                shard_index = int(shard_text)
+            except ValueError as exc:
+                raise ValueError("DISCOVERY_SHARD_INDEX must be an integer") from exc
+            if not 0 <= shard_index < 12:
+                raise ValueError("DISCOVERY_SHARD_INDEX must be from 0 to 11")
+            offset = 0
+            batches = []
+            for category, queries in category_queries:
+                chosen = tuple(
+                    query for index, query in enumerate(queries)
+                    if (offset + index) % 12 == shard_index
+                )
+                batches.append((category, chosen))
+                offset += len(queries)
+            category_queries = tuple(batches)
         total_configured_queries = sum(
             len(queries)
             for _, queries in category_queries

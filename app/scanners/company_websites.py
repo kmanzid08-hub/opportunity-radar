@@ -681,13 +681,22 @@ class CompanyWebsiteScanner(BaseScanner):
                     # First-time crawls must not be delayed by a low
                     # initial website discovery confidence score.
                     case((Source.last_scanned_at.is_(None), 0), else_=1).asc(),
+                    # Round-robin across runs: least recently completed sites
+                    # move to the front, preventing starvation in small batches.
+                    Source.last_scanned_at.asc(),
+                    case((Source.last_scan_started_at.is_(None), 0), else_=1).asc(),
+                    Source.last_scan_started_at.asc(),
                     Source.priority_score.desc(),
                     Source.confidence_score.desc(),
                     Source.organisation_name.asc(),
                 )
                 .limit(
                     min(self.MAX_SOURCES_PER_SCAN, 50)
-                    if recovery_only else self.MAX_SOURCES_PER_SCAN
+                    if recovery_only else (
+                        max(1, min(50, int(os.getenv("WEBSITE_SCAN_BATCH_SIZE", "16"))))
+                        if os.getenv("HOURLY_SCAN_MODE", "").lower() in {"true", "1", "yes"}
+                        else self.MAX_SOURCES_PER_SCAN
+                    )
                 )
             ).all()
 

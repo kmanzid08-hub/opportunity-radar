@@ -19,7 +19,7 @@ from app.intelligence.gemini_diagnostics import safe_model_name
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "gpt-5-mini"
+DEFAULT_MODEL = "gpt-6-luna"
 ResponseModel = TypeVar("ResponseModel", bound=BaseModel)
 
 # A backup that responds with 429 must not be called hundreds of times
