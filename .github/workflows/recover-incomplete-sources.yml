@@ -17,6 +17,8 @@ permissions:
 
 jobs:
   recovery:
+    # Manual recovery only: config changes must not launch surprise scans.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -26,6 +28,21 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_FALLBACK_ENABLED: ${{ vars.OPENAI_FALLBACK_ENABLED || 'true' }}
       OPENAI_FALLBACK_MODEL: ${{ vars.OPENAI_FALLBACK_MODEL || 'gpt-5-mini' }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_FALLBACK_ENABLED: ${{ vars.GROQ_FALLBACK_ENABLED || 'false' }}
+      GROQ_FALLBACK_MODEL: ${{ vars.GROQ_FALLBACK_MODEL || 'openai/gpt-oss-120b' }}
+      GROQ_FALLBACK_RPM: ${{ vars.GROQ_FALLBACK_RPM || '25' }}
+      GROQ_FALLBACK_TPM: ${{ vars.GROQ_FALLBACK_TPM || '7000' }}
+      GROQ_FALLBACK_RPD: ${{ vars.GROQ_FALLBACK_RPD || '900' }}
+      GROQ_FALLBACK_TPD: ${{ vars.GROQ_FALLBACK_TPD || '180000' }}
+      NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+      NVIDIA_FALLBACK_ENABLED: ${{ vars.NVIDIA_FALLBACK_ENABLED || 'false' }}
+      NVIDIA_FALLBACK_MODEL: ${{ vars.NVIDIA_FALLBACK_MODEL || 'openai/gpt-oss-20b' }}
+      NVIDIA_FALLBACK_RPM: ${{ vars.NVIDIA_FALLBACK_RPM || '32' }}
+      NVIDIA_FALLBACK_TPM: ${{ vars.NVIDIA_FALLBACK_TPM || '40000' }}
+      NVIDIA_FALLBACK_RPD: ${{ vars.NVIDIA_FALLBACK_RPD || '3000' }}
+      NVIDIA_FALLBACK_TPD: ${{ vars.NVIDIA_FALLBACK_TPD || '3000000' }}
+      COMMUNITY_API_ALLOW_COMPANY_DATA: ${{ vars.COMMUNITY_API_ALLOW_COMPANY_DATA || 'false' }}
       AUTOMATION_MODE: scan
       SOURCE_SCAN_RECOVERY_ONLY: 'true'
       ENABLE_INTERNAL_SCHEDULER: 'false'
