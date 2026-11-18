@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 import logging
 import os
+import time
+from threading import Lock
 from typing import TypeVar
 
 from pydantic import BaseModel
@@ -19,6 +21,33 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "gpt-5-mini"
 ResponseModel = TypeVar("ResponseModel", bound=BaseModel)
+
+# A backup that responds with 429 must not be called hundreds of times
+# by the same scan. Try again after the cooldown rather than losing all work.
+_rate_limit_lock = Lock()
+_rate_limited_until = 0.0
+RATE_LIMIT_COOLDOWN_SECONDS = 900
+
+
+def _available() -> bool:
+    with _rate_limit_lock:
+        return time.monotonic() >= _rate_limited_until
+
+
+def _note_provider_failure(exc: Exception) -> None:
+    code = getattr(exc, "status_code", None)
+    if code == 429 or type(exc).__name__ == "RateLimitError":
+        global _rate_limited_until
+        with _rate_limit_lock:
+            previous = _rate_limited_until
+            _rate_limited_until = max(
+                _rate_limited_until, time.monotonic() + RATE_LIMIT_COOLDOWN_SECONDS
+            )
+        if previous < time.monotonic():
+            logger.warning(
+                "OpenAI backup rate limited; bypassing requests for %ss",
+                RATE_LIMIT_COOLDOWN_SECONDS,
+            )
 
 
 class OpenAIFallbackError(RuntimeError):
@@ -62,6 +91,8 @@ def generate_structured(
     if not prompt.strip():
         raise ValueError("OpenAI fallback prompt must not be blank.")
     api_key, model = _config()
+    if not _available():
+        raise OpenAIFallbackError("OpenAI backup is temporarily rate limited.")
     _before_request(before_attempt)
 
     try:
@@ -82,6 +113,7 @@ def generate_structured(
             )
         result = response_schema.model_validate(parsed)
     except Exception as exc:
+        _note_provider_failure(exc)
         logger.warning(
             "OpenAI fallback structured output failed model=%s error_type=%s",
             safe_model_name(model, api_key), type(exc).__name__,
@@ -105,6 +137,8 @@ def generate_text(
     if not prompt.strip():
         raise ValueError("OpenAI fallback prompt must not be blank.")
     api_key, model = _config()
+    if not _available():
+        raise OpenAIFallbackError("OpenAI backup is temporarily rate limited.")
     _before_request()
     try:
         from openai import OpenAI
@@ -120,6 +154,7 @@ def generate_text(
         if not isinstance(output, str) or not output.strip():
             raise OpenAIFallbackError("OpenAI returned empty text.")
     except Exception as exc:
+        _note_provider_failure(exc)
         logger.warning(
             "OpenAI fallback text failed model=%s error_type=%s",
             safe_model_name(model, api_key), type(exc).__name__,
