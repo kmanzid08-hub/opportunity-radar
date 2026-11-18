@@ -322,3 +322,29 @@ def test_discovery_reports_category_and_total_metrics(
     assert "New sources:                   1" in output
     assert "Average runtime:               0.283 seconds" in output
     assert "Total runtime:                 4.000 seconds" in output
+
+
+def test_discovery_twelve_shards_cover_each_query_exactly_once(monkeypatch):
+    monkeypatch.setenv("BRAVE_API_KEY", "fake-key")
+    monkeypatch.delenv("RETRY_FAILED_SOURCE_ANALYSES", raising=False)
+    from collections import Counter
+    discovery = SourceDiscovery(country="Rwanda")
+    queries = [
+        q
+        for c in discovery.DISCOVERY_CATEGORIES
+        for q in c.queries_for("Rwanda")
+    ]
+    counts = Counter()
+    monkeypatch.setattr(discovery, "_wait", lambda: None)
+
+    def search(query):
+        counts[query] += 1
+        return []
+
+    monkeypatch.setattr(discovery, "_search", search)
+    for slot in range(12):
+        monkeypatch.setenv("DISCOVERY_SHARD_INDEX", str(slot))
+        stats = discovery.run()
+        assert stats["failed_queries"] == 0
+        assert stats["queries_executed"] <= 5
+    assert counts == Counter(queries)
