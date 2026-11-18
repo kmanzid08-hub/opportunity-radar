@@ -33,7 +33,7 @@ PROVIDERS = {
     },
     "nvidia": {
         "base_url": "https://integrate.api.nvidia.com/v1",
-        "model": "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+        "model": "openai/gpt-oss-20b",
         "rpm": 32, "tpm": 40000, "rpd": 3000, "tpd": 3000000,
     },
 }
@@ -218,7 +218,18 @@ def _attempt(
             "stream": False,
         }
         if response_schema is not None:
-            args["response_format"] = _schema_response_format(response_schema)
+            if config.name == "groq":
+                # The supported GPT-OSS 120B model offers best-effort JSON
+                # schema mode. Strict mode is unsuitable for optional fields.
+                args["response_format"] = _schema_response_format(response_schema)
+            else:
+                # NVIDIA models vary in structured-output parameters.
+                # A specific verified model is used, with schema guidance and
+                # mandatory local Pydantic validation before acceptance.
+                args["messages"][0]["content"] += (
+                    "\nRespond ONLY as a JSON object matching this JSON schema:\n"
+                    + schema_text
+                )
         response = client.chat.completions.create(**args)
         if not response.choices or response.choices[0].finish_reason == "length":
             raise FreeAPIError("Truncated or missing provider response.")
