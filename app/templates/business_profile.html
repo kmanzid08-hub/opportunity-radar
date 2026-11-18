@@ -4,23 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Companies | Opportunity Radar</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='/phase4.css') }}?v=2">
-    <script src="/static/beta.js" defer></script>
+    <link rel="stylesheet" href="{{ url_for('static', path='/phase4.css') }}?v=5">
+    <script src="/static/beta.js?v=5" defer></script>
 </head>
 <body>
-    <header class="app-header">
-        <div class="app-header-inner">
-            <a href="/" class="brand"><span class="brand-mark">OR</span><span>Opportunity Radar</span></a>
-            <nav class="main-nav" aria-label="Primary navigation">
-                <a href="/" class="nav-link">Discover</a>
-                <a href="/pipeline" class="nav-link">Pipeline</a>
-                <a href="/business-profile" class="nav-link active" aria-current="page">Companies</a>
-                <a href="/sources" class="nav-link">Sources</a>
-                <a href="/settings" class="nav-link">Account</a>
-            </nav>
-        </div>
-    </header>
-    <main class="page-shell profile-page-shell">
+    {% include '_app_header.html' %}
+    <main id="main-content" class="page-shell profile-page-shell">
         <header class="profile-hero">
             <p class="eyebrow">Company intelligence</p>
             <h1>{{ 'Add company' if create_new else 'Make your strengths clear.' }}</h1>

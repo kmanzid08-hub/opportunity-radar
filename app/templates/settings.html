@@ -3,8 +3,7 @@
 {% block content %}
 <h1>Account</h1>
 <p>{{ request.state.user.email }} · {{ workspace_name }}</p>
-<p>Private beta access is managed by invitation. Members of the same workspace can collaborate on company profiles, assessments and Pipeline notes. Shared source notices are available to invited users.</p>
-<p>Allowance: 10 analysis actions per user per hour, up to 9 provider attempts per action, and 90 provider attempts per workspace per day. Failed attempts count toward the allowance.</p>
+<p class="lede">Keep your workspace secure and your team connected. Everyone signs in with their own credentials.</p>
 
 {% if request.state.user.is_admin %}
 <section class="detail-section">
@@ -60,7 +59,7 @@
 </section>
 {% endif %}
 
-<h2>Change password</h2>
+<details class="account-security-panel"><summary>Security & password</summary><div class="account-security-inner"><h2>Change password</h2>
 <form action="/settings/password" method="post" class="profile-form-grid">
 <input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
 <label class="field"><span>Current password</span><input type="password" name="current_password" required maxlength="256" autocomplete="current-password"></label>
@@ -68,6 +67,8 @@
 <button class="button" type="submit">Change password</button>
 </form>
 <p>Changing your password signs out your other sessions. For password recovery, contact the beta administrator.</p>
+</div></details>
+<details class="account-usage-panel"><summary>Usage & limits</summary><p>Allowance: 10 analysis actions per user per hour, up to 9 provider attempts per action, and 90 provider attempts per workspace per day. Failed attempts count toward the allowance.</p></details>
 <form action="/logout" method="post">
 <input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
 <button class="button secondary" type="submit">Sign out</button>

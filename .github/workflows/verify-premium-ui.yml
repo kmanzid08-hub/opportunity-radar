@@ -1,0 +1,48 @@
+name: Verify client experience redesign
+on:
+  push:
+    branches: [design/quiet-premium-client-experience-20261118]
+  pull_request:
+    branches: [global-saas-development]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Compile and render templates
+        run: |
+          python -m compileall -q app tests
+          python - <<'PY'
+          from pathlib import Path
+          from jinja2 import Environment, FileSystemLoader
+          env = Environment(loader=FileSystemLoader('app/templates'))
+          for p in Path('app/templates').glob('*.html'):
+              env.get_template(p.name)
+          print('All templates compile')
+          PY
+      - name: Verify redesign and existing user journeys
+        run: |
+          python -m pytest -q \
+            tests/routes/test_premium_ui.py \
+            tests/routes/test_dashboard.py \
+            tests/routes/test_phase4_ui.py \
+            tests/routes/test_pipeline.py \
+            tests/routes/test_private_beta.py \
+            tests/routes/test_provenance_geography_ui.py \
+            tests/routes/test_rich_company_profiles.py \
+            tests/test_template_syntax.py
+      - name: Run baseline-clean regression suite
+        run: |
+          python -m pytest -q \
+            --ignore=tests/unit/intelligence/test_applicant_entailment.py \
+            --ignore=tests/unit/intelligence/test_evidence_policy.py \
+            --ignore=tests/unit/intelligence/test_phase9m_policy.py
