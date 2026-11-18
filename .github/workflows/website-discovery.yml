@@ -4,7 +4,7 @@ on:
   # Discover and retain newly found websites every Rwanda calendar day.
   # The Python job keeps durable last-success state to avoid duplicate runs.
   schedule:
-    - cron: "20 4 * * *"
+    - cron: "35 */2 * * *"
       timezone: "Africa/Kigali"
   workflow_dispatch:
   push:
@@ -27,16 +27,16 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_FALLBACK_ENABLED: ${{ vars.OPENAI_FALLBACK_ENABLED || 'true' }}
-      OPENAI_FALLBACK_MODEL: ${{ vars.OPENAI_FALLBACK_MODEL || 'gpt-5-mini' }}
+      OPENAI_FALLBACK_MODEL: ${{ vars.OPENAI_FALLBACK_MODEL || 'gpt-6-luna' }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-      GROQ_FALLBACK_ENABLED: ${{ vars.GROQ_FALLBACK_ENABLED || 'false' }}
+      GROQ_FALLBACK_ENABLED: ${{ vars.GROQ_FALLBACK_ENABLED || 'true' }}
       GROQ_FALLBACK_MODEL: ${{ vars.GROQ_FALLBACK_MODEL || 'openai/gpt-oss-120b' }}
       GROQ_FALLBACK_RPM: ${{ vars.GROQ_FALLBACK_RPM || '25' }}
       GROQ_FALLBACK_TPM: ${{ vars.GROQ_FALLBACK_TPM || '7000' }}
       GROQ_FALLBACK_RPD: ${{ vars.GROQ_FALLBACK_RPD || '900' }}
       GROQ_FALLBACK_TPD: ${{ vars.GROQ_FALLBACK_TPD || '180000' }}
       NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
-      NVIDIA_FALLBACK_ENABLED: ${{ vars.NVIDIA_FALLBACK_ENABLED || 'false' }}
+      NVIDIA_FALLBACK_ENABLED: ${{ vars.NVIDIA_FALLBACK_ENABLED || 'true' }}
       NVIDIA_FALLBACK_MODEL: ${{ vars.NVIDIA_FALLBACK_MODEL || 'openai/gpt-oss-20b' }}
       NVIDIA_FALLBACK_RPM: ${{ vars.NVIDIA_FALLBACK_RPM || '32' }}
       NVIDIA_FALLBACK_TPM: ${{ vars.NVIDIA_FALLBACK_TPM || '40000' }}
@@ -46,6 +46,8 @@ jobs:
       ENABLE_INTERNAL_SCHEDULER: "false"
       DISCOVERY_DIAGNOSTICS_PATH: "artifacts/source-discovery-decisions.jsonl"
       RETRY_FAILED_SOURCE_ANALYSES: "true"
+      DISCOVERY_SHARDED: "true"
+      AI_SHARED_PROVIDER_BUDGETS: "true"
       FORCE_WEBSITE_DISCOVERY: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[run-discovery]')) }}
 
     steps:
