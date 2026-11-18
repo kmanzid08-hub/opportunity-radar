@@ -684,6 +684,8 @@ class CompanyWebsiteScanner(BaseScanner):
                     # Round-robin across runs: least recently completed sites
                     # move to the front, preventing starvation in small batches.
                     Source.last_scanned_at.asc(),
+                    case((Source.last_scan_started_at.is_(None), 0), else_=1).asc(),
+                    Source.last_scan_started_at.asc(),
                     Source.priority_score.desc(),
                     Source.confidence_score.desc(),
                     Source.organisation_name.asc(),
