@@ -367,7 +367,9 @@ class SourceDiscovery:
             "true", "1", "yes", "on"
         }:
             try:
-                self._retry_failed_source_analyses()
+                self._retry_failed_source_analyses(
+                    limit=3 if os.getenv("DISCOVERY_SHARD_INDEX") else 12
+                )
             except Exception as exc:
                 # A failed recovery pass must not block new Brave discovery.
                 print(
