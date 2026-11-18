@@ -73,7 +73,7 @@
         <div class="opportunity-card-main">
           <div class="opportunity-card-top">
             <span class="opportunity-type">{{ opportunity.ai_opportunity_type.replace('_', ' ').title() }}</span>
-            {% if opportunity.display_triage and opportunity.display_triage.urgency.value == 'HIGH' %}<span class="urgency-pill">Time sensitive</span>{% elif opportunity.status == 'New' %}<span class="status-pill">New</span>{% endif %}
+            {% if opportunity.display_triage and opportunity.display_triage.urgency.value == 'HIGH' %}<span class="urgency-pill">Time sensitive</span>{% else %}<span class="status-pill">{{ opportunity.status }}</span>{% endif %}
           </div>
           <h3 class="opportunity-title"><a href="/opportunities/{{ opportunity.id }}?company_id={{ opportunity.display_match_company_id }}">{{ opportunity.ai_title or opportunity.title }}</a></h3>
           <p class="opportunity-summary">{{ opportunity.ai_summary or opportunity.description or 'A verified opportunity is available for review.' }}</p>
