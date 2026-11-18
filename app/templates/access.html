@@ -1,13 +1,31 @@
 {% extends 'beta_base.html' %}
 {% block title %}{{ 'Accept invitation' if invite else 'Sign in' }} | Opportunity Radar{% endblock %}
 {% block content %}
-<p class="eyebrow">Private beta</p><h1>{{ 'Accept invitation' if invite else 'Sign in' }}</h1>
-{% if error %}<p role="alert">{{ error }}</p>{% endif %}
-<form method="post" action="{{ '/accept-invite' if invite else '/login' }}" class="profile-form-grid">
-<input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
-{% if invite %}<label class="field"><span>Invitation code</span><input name="token" required maxlength="200" autocomplete="off"></label>
-{% else %}<label class="field"><span>Email</span><input name="email" type="email" required maxlength="254" autocomplete="username"></label>{% endif %}
-<label class="field"><span>{{ 'Choose a password (12–256 characters)' if invite else 'Password' }}</span><input name="password" type="password" required {% if invite %}minlength="12"{% endif %} maxlength="256" autocomplete="{{ 'new-password' if invite else 'current-password' }}"></label>
-<button class="button" type="submit">{{ 'Activate account' if invite else 'Sign in' }}</button></form>
-<p class="quiet">{% if invite %}<a href="/login">Already activated? Sign in</a>{% else %}<a href="/accept-invite">Use an invitation</a>. For access or password recovery, contact your beta administrator.{% endif %}</p>
+<div class="auth-layout">
+  <section class="auth-intro" aria-labelledby="auth-heading">
+    <div class="auth-symbol" aria-hidden="true">✦</div>
+    <p class="eyebrow">OPPORTUNITY RADAR</p>
+    <h1 id="auth-heading">{% if invite %}Your next opportunity starts here.{% else %}A clearer path to what's next.{% endif %}</h1>
+    <p class="lede">{% if invite %}Activate your invitation to discover, evaluate and follow the work that fits your business.{% else %}Less searching. More finding the opportunities worth pursuing.{% endif %}</p>
+    <div class="auth-accent-line" aria-hidden="true"></div>
+  </section>
+  <section class="auth-form-panel">
+    <p class="eyebrow">PRIVATE WORKSPACE</p>
+    <h2>{{ 'Activate your account' if invite else 'Welcome back' }}</h2>
+    <p class="quiet">{% if invite %}Enter your invitation code and set a secure password.{% else %}Sign in to your Opportunity Radar workspace.{% endif %}</p>
+    {% if error %}<p role="alert" class="auth-error">{{ error }}</p>{% endif %}
+    <form method="post" action="{{ '/accept-invite' if invite else '/login' }}" class="auth-form" autocomplete="on">
+      <input type="hidden" name="csrf_token" value="{{ request.state.csrf }}">
+      {% if invite %}
+      <label class="field"><span>Invitation code</span><input name="token" required maxlength="200" autocomplete="off" placeholder="Paste your invitation code"></label>
+      {% else %}
+      <label class="field"><span>Email address</span><input name="email" type="email" required maxlength="254" autocomplete="username" placeholder="you@company.com"></label>
+      {% endif %}
+      <label class="field"><span>{{ 'Create a password (12–256 characters)' if invite else 'Password' }}</span><input name="password" type="password" required {% if invite %}minlength="12"{% endif %} maxlength="256" autocomplete="{{ 'new-password' if invite else 'current-password' }}" placeholder="{{ 'At least 12 characters' if invite else 'Enter your password' }}"></label>
+      <button class="button" type="submit">{{ 'Activate account' if invite else 'Sign in' }} <span aria-hidden="true">→</span></button>
+    </form>
+    <p class="quiet auth-bottom">{% if invite %}Already activated? <a href="/login">Sign in</a>{% else %}New to Opportunity Radar? <a href="/accept-invite">Use an invitation</a>.{% endif %}</p>
+    {% if not invite %}<p class="auth-help">Need access or password recovery? Contact your workspace administrator.</p>{% endif %}
+  </section>
+</div>
 {% endblock %}
