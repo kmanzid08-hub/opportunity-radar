@@ -152,3 +152,39 @@ def test_recovery_only_uses_website_crawler(monkeypatch):
     # Verify that scan selection honors the environment without touching DB.
     candidates = scanner_module.get_scanners()
     assert any(type(item).__name__ == "CompanyWebsiteScanner" for item in candidates)
+
+
+def test_hourly_batches_advance_to_unscanned_sources(
+    monkeypatch, isolated_session_factory
+):
+    from app.scanners import company_websites
+    monkeypatch.setenv("DAILY_SOURCE_SCAN", "true")
+    monkeypatch.setenv("HOURLY_SCAN_MODE", "true")
+    monkeypatch.setenv("WEBSITE_SCAN_BATCH_SIZE", "4")
+    monkeypatch.setattr(company_websites, "SessionLocal", isolated_session_factory)
+    now = datetime.now(timezone.utc)
+    with isolated_session_factory() as db:
+        db.add_all([
+            Source(
+                organisation_name=f"Site {i:02}",
+                base_url=f"https://site{i}.test",
+                monitor_url=f"https://site{i}.test/tenders",
+                domain=f"site{i}.test",
+                is_active=True, is_approved=True,
+                confidence_score=50, priority_score=50,
+                last_scanned_at=None,
+            )
+            for i in range(10)
+        ])
+        db.commit()
+    crawler = CompanyWebsiteScanner()
+    first = crawler._get_sources()
+    assert len(first) == 4
+    with isolated_session_factory() as db:
+        for source_row in first:
+            row = db.get(Source, source_row.id)
+            row.last_scanned_at = now
+        db.commit()
+    second = crawler._get_sources()
+    assert len(second) == 4
+    assert not {r.id for r in first} & {r.id for r in second}
