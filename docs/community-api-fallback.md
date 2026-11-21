@@ -42,7 +42,7 @@ At 4,000 tokens per request this free plan can handle at most roughly
 
 For NVIDIA NIM, the defaults of 32 RPM and 40,000 TPM are deliberately
 chosen *local safety caps*, **not verified account entitlements**.
-The available prototype model defaults to `openai/gpt-oss-20b` as shown on
+The available prototype model defaults to `meta/muse-glimmer-30b` as shown on
 https://build.nvidia.com/openai/gpt-oss-20b.
 Free prototyping is for testing, not a guaranteed ongoing production SLA.
 Confirm the individual account's quota, model permissions, and license/terms.
@@ -156,3 +156,19 @@ production.
 
 All qualification decisions, company match thresholds, and privacy
 constraints are unchanged.
+
+
+### NVIDIA model retirement recovery (Nov 21, 2026)
+
+The old NVIDIA hosted `openai/gpt-oss-20b` endpoint repeatedly returned HTTP 410.
+The default is now `meta/muse-glimmer-30b`. Stale environment overrides with
+that exact retired model ID are ignored and mapped to the new default.
+NVIDIA receives JSON-only instructions, and all results are validated locally
+against the original Pydantic schema before acceptance; no unsupported JSON
+schema response-format feature is assumed.
+
+HTTP 404/410 responses quarantine the failing model for 24 hours, across
+hourly jobs, to avoid needless API calls. The next available provider is
+used instead. Updating the model restores its independent eligibility.
+A successful authenticated structured-output smoke test is still required
+before relying on the replacement for production classifications.
