@@ -1,0 +1,91 @@
+name: Verify NVIDIA model migration
+on:
+  push:
+    branches: [fix/nvidia-supported-model-and-410-breaker-20261121]
+  pull_request:
+    branches: [global-saas-development]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  nvidia-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install app dependencies
+        run: pip install -r requirements.txt
+      - name: Validate and run mocked provider regressions
+        run: |
+          python -m compileall -q app tests
+          python -m pytest -q tests/test_free_api_fallback.py tests/test_openai_fallback.py tests/unit/intelligence/test_gemini_retries.py tests/unit/intelligence/test_gemini_diagnostics.py
+      - name: Test broader stable baseline
+        run: |
+          python -m pytest -q \
+            --ignore=tests/unit/intelligence/test_applicant_entailment.py \
+            --ignore=tests/unit/intelligence/test_evidence_policy.py \
+            --ignore=tests/unit/intelligence/test_phase9m_policy.py
+
+  live-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install client and schema dependencies
+        run: pip install -r requirements.txt
+      - name: One authenticated synthetic NVIDIA structured classification
+        shell: bash
+        run: |
+          if [ -z "$NVIDIA_API_KEY" ]; then
+            echo "::error::NVIDIA_API_KEY is not available to GitHub Actions"
+            exit 1
+          fi
+          python - <<'PY'
+          import os
+          import json
+          from openai import OpenAI
+          from app.intelligence.schemas import SourceAnalysis
+          api = OpenAI(
+              base_url="https://integrate.api.nvidia.com/v1",
+              api_key=os.environ["NVIDIA_API_KEY"],
+              timeout=50,
+              max_retries=0,
+          )
+          prompt = (
+              "Classify this SYNTHETIC public organization source: "
+              "'Example Ministry website publishes open procurement notices "
+              "and requests for proposals to consulting firms.' "
+              "Return JSON ONLY. Required fields: decision=ACCEPT, "
+              "confidence=90, reason='Publishes procurement notices'."
+          )
+          response = api.chat.completions.create(
+              model="meta/muse-glimmer-30b",
+              messages=[
+                  {"role": "system", "content": (
+                      "Respond with a valid JSON object only, with fields "
+                      "decision, confidence, reason, matching this schema: "
+                      + json.dumps(SourceAnalysis.model_json_schema())
+                  )},
+                  {"role": "user", "content": prompt},
+              ],
+              reasoning_effort="none",
+              max_tokens=800,
+              stream=False,
+          )
+          body = response.choices[0].message.content or ""
+          parsed = SourceAnalysis.model_validate_json(body)
+          assert parsed.decision.value == "ACCEPT"
+          assert parsed.confidence >= 70
+          print(
+              "NVIDIA authenticated synthetic structured classification: PASS "
+              "(model=meta/muse-glimmer-30b, schema=SourceAnalysis)"
+          )
+          PY

@@ -52,7 +52,7 @@ def test_generic_text_requires_explicit_privacy_opt_in(monkeypatch):
 
 def configured(name="groq", **overrides):
     d = dict(
-        name=name, model="openai/gpt-oss-120b" if name == "groq" else "openai/gpt-oss-20b",
+        name=name, model="openai/gpt-oss-120b" if name == "groq" else "meta/muse-glimmer-30b",
         base_url="https://api.groq.com/openai/v1"
         if name == "groq" else "https://integrate.api.nvidia.com/v1",
         api_key="fake-only", rpm=25, tpm=7000, rpd=900, tpd=180000,
@@ -170,9 +170,10 @@ def test_nvidia_uses_available_model_and_validates_locally(monkeypatch):
         ),
     )
     assert free.generate_structured("some notice", Sample).value == 13
-    assert capture["model"] == "openai/gpt-oss-20b"
+    assert capture["model"] == "meta/muse-glimmer-30b"
     assert "response_format" not in capture
     assert "JSON schema" in capture["messages"][0]["content"]
+    assert capture["reasoning_effort"] == "none"
 
 
 def test_provider_rate_limit_opens_cooldown_and_falls_through(monkeypatch):
@@ -341,3 +342,67 @@ def test_gemini_handles_public_requests_when_both_free_budgets_empty(monkeypatch
         "public publisher", SourceAnalysis
     ) == expected
     assert sdk.models.generate_content.call_count == 1
+
+
+def test_nvidia_deprecated_model_env_override_is_replaced(monkeypatch):
+    monkeypatch.setenv("NVIDIA_API_KEY", "fake")
+    monkeypatch.setenv("NVIDIA_FALLBACK_ENABLED", "true")
+    monkeypatch.setenv("NVIDIA_FALLBACK_MODEL", "openai/gpt-oss-20b")
+    monkeypatch.delenv("GROQ_FALLBACK_ENABLED", raising=False)
+    (config,) = free.enabled_configs()
+    assert config.name == "nvidia"
+    assert config.model == "meta/muse-glimmer-30b"
+
+
+def test_nvidia_410_opens_model_circuit_for_24h_and_falls_back(monkeypatch):
+    import openai
+    from app.intelligence import free_api_fallback as module
+    cfg = configured("nvidia")
+    fallback = configured("groq")
+    monkeypatch.setattr(module, "enabled_configs", lambda: [cfg, fallback])
+    monkeypatch.setattr(module, "_ordered_configs", lambda c: c)
+    nvidia_budget = module.RequestBudget(cfg)
+    groq_budget = module.RequestBudget(fallback)
+    monkeypatch.setattr(
+        module, "_get_budget",
+        lambda c: nvidia_budget if c.name == "nvidia" else groq_budget,
+    )
+    pauses = []
+    monkeypatch.setattr(
+        module, "_record_permanent_model_failure",
+        lambda c, seconds: pauses.append((c.model, seconds)),
+    )
+    class RetiredEndpoint(Exception):
+        status_code = 410
+
+    calls = []
+    def create(**kwargs):
+        calls.append(kwargs["model"])
+        if kwargs["model"] == cfg.model:
+            raise RetiredEndpoint("Gone")
+        return mock_response(37)
+    monkeypatch.setattr(
+        openai, "OpenAI",
+        lambda **_: SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        ),
+    )
+    assert module.generate_structured("public tender A", Sample).value == 37
+    assert module.generate_structured("public tender B", Sample).value == 37
+    assert calls == [cfg.model, fallback.model, fallback.model]
+    assert pauses == [(cfg.model, 86400)]
+
+
+def test_shared_model_quarantine_prevents_new_process_requests(
+    monkeypatch, isolated_session_factory,
+):
+    from app import database
+    from app.intelligence import free_api_fallback as module
+    monkeypatch.setenv("AI_SHARED_PROVIDER_BUDGETS", "true")
+    monkeypatch.setattr(database, "SessionLocal", isolated_session_factory)
+    cfg = configured("nvidia", rpm=40, tpm=50000, rpd=1000, tpd=1000000)
+    fresh_cfg = configured("nvidia", model="meta/new-nvidia-model",
+                           rpm=40, tpm=50000, rpd=1000, tpd=1000000)
+    module._record_permanent_model_failure(cfg, 86400)
+    assert not module._reserve_shared_budget(cfg, 100)
+    assert module._reserve_shared_budget(fresh_cfg, 100)
