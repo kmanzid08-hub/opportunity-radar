@@ -39,7 +39,7 @@ jobs:
       GROQ_FALLBACK_TPD: ${{ vars.GROQ_FALLBACK_TPD || '180000' }}
       NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
       NVIDIA_FALLBACK_ENABLED: ${{ vars.NVIDIA_FALLBACK_ENABLED || 'true' }}
-      NVIDIA_FALLBACK_MODEL: ${{ vars.NVIDIA_FALLBACK_MODEL || 'openai/gpt-oss-20b' }}
+      NVIDIA_FALLBACK_MODEL: ${{ vars.NVIDIA_FALLBACK_MODEL || 'meta/muse-glimmer-30b' }}
       NVIDIA_FALLBACK_RPM: ${{ vars.NVIDIA_FALLBACK_RPM || '32' }}
       NVIDIA_FALLBACK_TPM: ${{ vars.NVIDIA_FALLBACK_TPM || '40000' }}
       NVIDIA_FALLBACK_RPD: ${{ vars.NVIDIA_FALLBACK_RPD || '3000' }}
