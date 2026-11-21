@@ -1,0 +1,30 @@
+name: Verify NVIDIA model migration
+on:
+  push:
+    branches: [fix/nvidia-supported-model-and-410-breaker-20261121]
+  pull_request:
+    branches: [global-saas-development]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  nvidia-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install app dependencies
+        run: pip install -r requirements.txt
+      - name: Validate and run mocked provider regressions
+        run: |
+          python -m compileall -q app tests
+          python -m pytest -q tests/test_free_api_fallback.py tests/test_openai_fallback.py tests/unit/intelligence/test_gemini_retries.py tests/unit/intelligence/test_gemini_diagnostics.py
+      - name: Test broader stable baseline
+        run: |
+          python -m pytest -q \
+            --ignore=tests/unit/intelligence/test_applicant_entailment.py \
+            --ignore=tests/unit/intelligence/test_evidence_policy.py \
+            --ignore=tests/unit/intelligence/test_phase9m_policy.py
