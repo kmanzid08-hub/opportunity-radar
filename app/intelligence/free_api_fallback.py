@@ -35,7 +35,7 @@ PROVIDERS = {
     },
     "nvidia": {
         "base_url": "https://integrate.api.nvidia.com/v1",
-        "model": "openai/gpt-oss-20b",
+        "model": "meta/muse-glimmer-30b",
         "rpm": 32, "tpm": 40000, "rpd": 3000, "tpd": 3000000,
     },
 }
@@ -85,9 +85,15 @@ def enabled_configs(environ: Mapping[str, str] | None = None) -> list[ProviderCo
         if not _enabled(name, source):
             continue
         prefix = name.upper()
+        model = source.get(f"{prefix}_FALLBACK_MODEL", "").strip() or str(default["model"])
+        # The old NVIDIA hosted model now returns HTTP 410. A GitHub Actions
+        # variable may still contain this old value; never keep selecting it.
+        if name == "nvidia" and model == "openai/gpt-oss-20b":
+            logger.warning("Deprecated NVIDIA model override ignored; using supported default")
+            model = str(default["model"])
         configs.append(ProviderConfig(
             name=name,
-            model=source.get(f"{prefix}_FALLBACK_MODEL", "").strip() or str(default["model"]),
+            model=model,
             base_url=str(default["base_url"]),  # fixed allowlist, never user-provided
             api_key=source[f"{prefix}_API_KEY"].strip(),
             rpm=_setting(source, f"{prefix}_FALLBACK_RPM", int(default["rpm"])),
@@ -169,6 +175,42 @@ def _shared_budget_enabled() -> bool:
     return DATABASE_URL.startswith(("postgresql", "postgres:"))
 
 
+def _outage_key(config: ProviderConfig) -> str:
+    # Key by provider AND model: replacing a retired model must recover
+    # immediately without waiting for an older model's circuit to expire.
+    return f"ai-provider-outage:{config.name}:{config.model}"
+
+
+def _record_permanent_model_failure(config: ProviderConfig, seconds: int) -> None:
+    """Persist unsupported-model failures across hourly GitHub Actions jobs."""
+    if not _shared_budget_enabled():
+        return
+    from app.beta_models import BetaUsage
+    from app.database import SessionLocal
+
+    try:
+        with SessionLocal() as db:
+            if db.get_bind().dialect.name == "postgresql":
+                db.execute(
+                    text("SELECT pg_advisory_xact_lock(hashtext(:lock_name))"),
+                    {"lock_name": _outage_key(config)},
+                )
+            row = db.get(BetaUsage, _outage_key(config))
+            expiry = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+            if row is None:
+                db.add(BetaUsage(key=_outage_key(config), count=1, expires_at=expiry))
+            else:
+                row.count += 1
+                row.expires_at = expiry
+            db.commit()
+    except Exception as exc:
+        # Local circuit still blocks retries even if shared DB is unavailable.
+        logger.warning(
+            "Could not persist retired model quarantine provider=%s error_type=%s",
+            config.name, type(exc).__name__,
+        )
+
+
 def _reserve_shared_budget(config: ProviderConfig, estimate: int) -> bool:
     """Atomically enforce minute AND daily limits across app + GitHub jobs.
 
@@ -201,6 +243,13 @@ def _reserve_shared_budget(config: ProviderConfig, estimate: int) -> bool:
                     text("SELECT pg_advisory_xact_lock(hashtext(:lock_name))"),
                     {"lock_name": prefix},
                 )
+            outage = db.get(BetaUsage, _outage_key(config))
+            if outage is not None:
+                expiry = outage.expires_at
+                if expiry.tzinfo is None:
+                    expiry = expiry.replace(tzinfo=timezone.utc)
+                if expiry > now:
+                    return False
             present = {
                 row.key: row
                 for row in db.scalars(select(BetaUsage).where(BetaUsage.key.in_(keys)))
@@ -310,13 +359,18 @@ def _attempt(
                 # schema mode. Strict mode is unsuitable for optional fields.
                 args["response_format"] = _schema_response_format(response_schema)
             else:
-                # NVIDIA models vary in structured-output parameters.
-                # A specific verified model is used, with schema guidance and
-                # mandatory local Pydantic validation before acceptance.
+                # Muse Glimmer offers a live prototype endpoint but does not
+                # advertise native JSON schema mode. Demand a JSON object
+                # and validate it against our unchanged Pydantic model.
                 args["messages"][0]["content"] += (
-                    "\nRespond ONLY as a JSON object matching this JSON schema:\n"
+                    "\nReturn ONLY a valid JSON object, without code fences, "
+                    "analysis, or commentary, following this JSON schema:\n"
                     + schema_text
                 )
+                if config.model == "meta/muse-glimmer-30b":
+                    # NVIDIA exposes 'none' to avoid consuming the short
+                    # completion budget on internal reasoning.
+                    args["reasoning_effort"] = "none"
         response = client.chat.completions.create(**args)
         if not response.choices or response.choices[0].finish_reason == "length":
             raise FreeAPIError("Truncated or missing provider response.")
@@ -348,6 +402,11 @@ def _attempt(
             budget.pause(900)
         elif status in {401, 403}:
             budget.pause(3600)
+        elif status in {404, 410}:
+            # Unsupported/retired model: retrying every notice and every
+            # hourly job cannot help. Quarantine this exact model for 24 h.
+            budget.pause(86_400)
+            _record_permanent_model_failure(config, 86_400)
         elif status in {502, 503, 504}:
             budget.pause(300)
         logger.warning(
