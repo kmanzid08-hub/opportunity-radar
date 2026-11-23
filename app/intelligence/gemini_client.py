@@ -446,6 +446,23 @@ class GeminiClient:
                     detail["error"],
                     detail["reason"],
                 )
+            # Schema errors need not discard a real tender. An explicitly
+            # configured OpenAI backup can re-extract the same evidence using
+            # our Pydantic contract; never relax validation or log input.
+            from app.intelligence import openai_fallback
+            if openai_fallback.fallback_enabled():
+                try:
+                    return openai_fallback.generate_structured(
+                        prompt,
+                        response_schema,
+                        system_instruction=system_instruction,
+                        before_attempt=before_attempt,
+                    )
+                except openai_fallback.OpenAIFallbackError:
+                    logger.warning(
+                        "Structured backup unavailable stage=%s schema=%s",
+                        self._stage(operation), response_schema.__name__,
+                    )
             raise GeminiResponseError(
                 "Gemini returned an invalid structured response.",
                 diagnostic=diagnostic,
