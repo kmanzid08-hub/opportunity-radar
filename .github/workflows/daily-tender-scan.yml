@@ -51,6 +51,7 @@ jobs:
       HOURLY_SCAN_MODE: 'true'
       WEBSITE_SCAN_BATCH_SIZE: '16'
       AI_SHARED_PROVIDER_BUDGETS: 'true'
+      SCAN_FAIL_ON_ERRORS: 'true'
       WEBSITE_SCAN_WORKERS: '6'
       WEBSITE_MAX_PAGES_PER_SOURCE: '12'
       WEBSITE_CRAWL_BUDGET_SECONDS: '55'
@@ -99,7 +100,9 @@ jobs:
           fi
 
       - name: Scan and qualify newly discovered opportunities with AI
+        id: ingestion
         run: python -m app.automation_run
 
       - name: Match existing verified notices to new business profiles
+        if: ${{ success() || steps.ingestion.outcome == 'failure' }}
         run: python -m app.backfill_matches
