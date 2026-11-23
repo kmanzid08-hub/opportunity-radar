@@ -12,6 +12,8 @@ on:
     paths:
       - .github/workflows/website-discovery.yml
 
+# Production verification trigger after AI routing, recovery, and schedule fixes.
+
 concurrency:
   group: opportunity-radar-data-pipeline
   cancel-in-progress: false
