@@ -44,7 +44,8 @@ def test_unspecified_experience_normalizes_without_inventing_satisfaction(eviden
     adjusted = checked(a, raw)
     assert adjusted.experience_evidence.value == "UNKNOWN"
     assert raw.experience_evidence.value == evidence
-    assert adjusted.priority == raw.priority
+    assert adjusted.priority.value == "MEDIUM"
+    assert adjusted.priority_score == min(raw.priority_score, 69)
     assert any("unspecified" in reason for reason in adjusted.key_reasons)
     if evidence != "UNKNOWN":
         assert "experience_requirement_unknown" in adjusted.policy_adjustments
@@ -116,6 +117,7 @@ def test_sama_policy_barriers_adjustment_persisted_cached_not_raw(
         experience_requirements=[],
         qualification_requirements=[],
         eligibility_requirements=[],
+        deadline="2099-10-30",
     )
     oid, companies = _seed(
         isolated_session_factory,
@@ -139,7 +141,7 @@ def test_sama_policy_barriers_adjustment_persisted_cached_not_raw(
     assert first.status == "TRIAGED" and first.error_category is None
     assert second.status == "CACHED" and second.result == first.result
     assert first.result.experience_evidence.value == "UNKNOWN"
-    assert first.result.priority == raw.priority
+    assert first.result.priority.value == "MEDIUM"
     with isolated_session_factory() as db:
         stored = db.scalar(select(CompanyOpportunityTriage))
         assert stored.result_data == first.result.model_dump(mode="json")
