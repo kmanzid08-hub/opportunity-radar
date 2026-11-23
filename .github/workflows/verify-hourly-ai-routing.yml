@@ -33,7 +33,4 @@ jobs:
             tests/integration/test_resumable_website_scan.py
       - name: Complete baseline-clean test suite
         run: |
-          python -m pytest -q \
-            --ignore=tests/unit/intelligence/test_applicant_entailment.py \
-            --ignore=tests/unit/intelligence/test_evidence_policy.py \
-            --ignore=tests/unit/intelligence/test_phase9m_policy.py
+          python -m pytest -q
