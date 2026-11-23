@@ -419,3 +419,32 @@ def test_eligibility_change_rematches_a_stored_pair(
         opportunity_id, matcher=matcher
     )[0].qualifies_for_feed
     assert matcher.call_count == 2
+
+
+
+def test_unsupported_ai_eligibility_quote_uses_only_page_verified_backup(monkeypatch):
+    from app.intelligence import openai_fallback
+
+    client = Mock()
+    client.generate_structured.return_value = _analysis(
+        bidder_eligibility=eligibility(["INDIVIDUAL"])
+    )
+    expected = _analysis(bidder_eligibility=BidderEligibility())
+    monkeypatch.setattr(openai_fallback, "fallback_enabled", lambda: True)
+    backup = Mock(return_value=expected)
+    monkeypatch.setattr(openai_fallback, "generate_structured", backup)
+    recovered = analyze_opportunity(
+        source_url="https://example.test/tender",
+        page_content="No applicant type specified.",
+        client=client,
+    )
+    assert recovered.bidder_eligibility.status.value == "UNSPECIFIED"
+    backup.assert_called_once()
+
+    backup.return_value = _analysis(bidder_eligibility=eligibility(["INDIVIDUAL"]))
+    with pytest.raises(GeminiResponseError, match="quote is not supported"):
+        analyze_opportunity(
+            source_url="https://example.test/tender",
+            page_content="No applicant type specified.",
+            client=client,
+        )
