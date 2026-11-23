@@ -577,6 +577,20 @@ class CompanyWebsiteScanner(BaseScanner):
             # Retry these sites alone, even if the normal scan interval has
             # not elapsed. Never reset their checkpoint simply to force a run.
             for source in active_sources:
+                # If a crawl completed but its downstream AI/matching failed,
+                # its completion checkpoint remains older than the start.
+                # Apply a short retry cooldown instead of repeatedly spending
+                # the same provider quota on every hourly invocation.
+                started = source.last_scan_started_at
+                finished = source.last_scanned_at
+                if started is not None:
+                    if started.tzinfo is None:
+                        started = started.replace(tzinfo=timezone.utc)
+                    if finished is not None and finished.tzinfo is None:
+                        finished = finished.replace(tzinfo=timezone.utc)
+                    unfinished = finished is None or started > finished
+                    if unfinished and now - started < timedelta(minutes=55):
+                        continue
                 if recovery_only:
                     started_at = source.last_scan_started_at
                     finished_at = source.last_scanned_at
