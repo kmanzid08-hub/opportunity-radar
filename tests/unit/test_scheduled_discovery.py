@@ -292,13 +292,15 @@ def test_two_hour_shard_is_idempotent_and_preserves_other_slots(
     monkeypatch.setattr(scheduled_discovery, "_run_country_discovery", run)
     assert scheduled_discovery.main() == 0
     assert scheduled_discovery.main() == 0
-    run.assert_called_once_with(["Rwanda"])
+    # First invocation covers the current slot and one missed slot;
+    # the next invocation progresses the backlog without rerunning either.
+    assert run.call_count == 4
     with isolated_session_factory() as db:
-        names = [
-            row.job_name
-            for row in db.query(AutomationJobState).all()
-        ]
+        names = [row.job_name for row in db.query(AutomationJobState).all()]
         assert "website_discovery_slot_2026-11-18_5" in names
+        assert "website_discovery_slot_2026-11-17_0" in names
+        assert "website_discovery_slot_2026-11-17_1" in names
+        assert "website_discovery_slot_2026-11-17_2" in names
 
 
 def test_failed_shard_remains_due(
@@ -320,7 +322,7 @@ def test_failed_shard_remains_due(
         scheduled_discovery, "_run_country_discovery",
         lambda _countries: {"queries_executed": 4, "failed_queries": 4},
     )
-    with pytest.raises(RuntimeError, match="slot failed"):
+    with pytest.raises(RuntimeError, match="still require retry"):
         scheduled_discovery.main()
     with isolated_session_factory() as db:
         assert db.query(AutomationJobState).count() == 0
