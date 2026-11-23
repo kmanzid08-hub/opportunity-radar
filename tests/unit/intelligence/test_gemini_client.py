@@ -177,3 +177,32 @@ def test_api_failure_is_wrapped_without_prompt_or_key() -> None:
     assert "secret-key" not in message
     assert "prompt-containing-private-data" not in message
     assert "provider details" not in message
+
+
+
+def test_malformed_gemini_output_can_use_validated_opt_in_backup(monkeypatch) -> None:
+    from app.intelligence import free_api_fallback, openai_fallback
+
+    monkeypatch.setattr(free_api_fallback, "any_enabled", lambda: False)
+    monkeypatch.setattr(openai_fallback, "fallback_enabled", lambda: True)
+    expected = SourceAnalysis.model_validate({
+        "decision": "REJECT",
+        "confidence": 97,
+        "reason": "Unsupported tender source",
+    })
+    calls = []
+
+    def backup(prompt, schema, **kwargs):
+        calls.append((prompt, schema))
+        return expected
+
+    monkeypatch.setattr(openai_fallback, "generate_structured", backup)
+    client = GeminiClient(
+        GeminiConfig(api_key="secret-key"),
+        client_factory=RecordingFactory(
+            FakeModels(response=SimpleNamespace(parsed=None, text="not-json"))
+        ),
+    )
+    result = client.generate_structured("Analyze a public source", SourceAnalysis)
+    assert result is expected
+    assert calls == [("Analyze a public source", SourceAnalysis)]
