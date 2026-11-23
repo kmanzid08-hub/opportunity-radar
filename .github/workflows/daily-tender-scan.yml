@@ -14,7 +14,7 @@ on:
     paths:
       - .github/workflows/daily-tender-scan.yml
 
-# Production verification trigger after AI routing, recovery, and schedule fixes.
+# Production validation: quote-grounded AI re-extraction and strict ingestion failures.
 
 concurrency:
   group: opportunity-radar-${{ github.workflow }}
