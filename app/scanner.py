@@ -426,11 +426,13 @@ def run_scanner() -> None:
                 and type(source_scanner).iter_opportunities
                 is CompanyWebsiteScanner.iter_opportunities
             ):
+                failed_batches = [0]
                 def completed_site_listings():
-                    seen_urls: set[str] = set()
                     for batch in source_scanner.iter_source_batches():
                         if not batch.crawl_succeeded:
+                            failed_batches[0] += 1
                             continue
+                        seen_urls: set[str] = set()
                         source_processing["failed"] = False
                         for item in batch.listings:
                             if item.source_url not in seen_urls:
@@ -598,6 +600,10 @@ def run_scanner() -> None:
                 f"      Match score: "
                 f"{filtered.match_score}"
             )
+
+        if isinstance(source_scanner, CompanyWebsiteScanner) and "failed_batches" in locals():
+            total_scan_failures += failed_batches[0]
+            del failed_batches
 
         total_found += source_total
         print(f"Found {source_total} possible listings")
