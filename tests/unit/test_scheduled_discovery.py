@@ -198,7 +198,7 @@ def test_workflow_discovers_daily_and_can_be_forced_explicitly() -> None:
         / "website-discovery.yml"
     ).read_text(encoding="utf-8")
 
-    assert 'cron: "35 */2 * * *"' in workflow
+    assert 'cron: "41 */2 * * *"' in workflow
     assert 'DISCOVERY_SHARDED:' in workflow
     assert "workflow_dispatch:" in workflow
     assert "FORCE_WEBSITE_DISCOVERY:" in workflow
