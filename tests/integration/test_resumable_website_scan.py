@@ -132,3 +132,22 @@ def test_acknowledgement_is_idempotent_and_deferred(
         saved = db.get(Source, site_id)
         assert saved.last_scanned_at is not None
         assert saved.total_opportunities_found == 1
+
+
+
+def test_unverified_duplicate_does_not_hold_entire_publisher_for_retry(monkeypatch):
+    """A canonical REVIEW/REJECT result is not a transient matching outage."""
+    from app.intelligence import matching_engine
+
+    def unverified(_opportunity_id):
+        raise ValueError("Company matching accepts VERIFIED opportunities only.")
+
+    monkeypatch.setattr(matching_engine, "_load_verified_analysis", unverified)
+    monkeypatch.setattr(
+        scanner,
+        "match_verified_opportunity",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("should not match unverified notice")
+        ),
+    )
+    assert scanner.match_saved_opportunity(42, []) == (0, 0)
