@@ -561,56 +561,100 @@ def _run_country_discovery(
 
 
 def _run_sharded_discovery() -> int:
-    """Run one of 12 two-hour slots; durable state prevents duplicate slots.
+    """Recover missed two-hour discovery slots without overwhelming providers.
 
-    On success, only this slot is marked complete. A failed query in a slot
-    can be re-attempted without repeating other slots.
+    A scheduled invocation performs the current slot and up to one previously
+    missed slot (including yesterday), oldest first. Each successful slot has
+    its own durable checkpoint; partially failed slots are retried.
     """
     now = _utc_now()
     kigali = ZoneInfo("Africa/Kigali")
     local = now.astimezone(kigali)
-    slot = local.hour // 2
-    slot_name = f"website_discovery_slot_{local.date().isoformat()}_{slot}"
+    current_date = local.date()
+    current_slot = local.hour // 2
+    candidates = []
+    # Allow yesterday's unfinished slots to be recovered after downtime.
+    for day in (current_date - timedelta(days=1), current_date):
+        for slot in range(12):
+            if day == current_date and slot > current_slot:
+                continue
+            candidates.append((day, slot))
     with SessionLocal() as db:
-        previous = db.get(AutomationJobState, slot_name)
-        if previous is not None and previous.last_success_at is not None:
-            print(f"Website discovery slot {slot} already completed today")
-            return 0
-    print(f"Sharded website discovery: slot={slot}/12 date={local.date()}", flush=True)
+        completed = {
+            state.job_name
+            for state in db.scalars(
+                select(AutomationJobState).where(
+                    AutomationJobState.job_name.like("website_discovery_slot_%"),
+                    AutomationJobState.last_success_at.is_not(None),
+                )
+            )
+        }
+
+    current = (current_date, current_slot)
+    missed = [
+        pair for pair in candidates
+        if pair != current
+        and f"website_discovery_slot_{pair[0].isoformat()}_{pair[1]}" not in completed
+    ]
+    # Prioritize current discovery, then the oldest missed slot. This bounds
+    # API consumption to two slices per invocation.
+    due = [
+        pair for pair in [current, *missed]
+        if f"website_discovery_slot_{pair[0].isoformat()}_{pair[1]}" not in completed
+    ][:2]
+    if not due:
+        print("Website discovery: no outstanding slots", flush=True)
+        return 0
+
     original = os.environ.get("DISCOVERY_SHARD_INDEX")
-    os.environ["DISCOVERY_SHARD_INDEX"] = str(slot)
+    failures = 0
     try:
-        countries = _discovery_countries()
-        summary = _run_country_discovery(countries)
+        for day, slot in due:
+            slot_name = f"website_discovery_slot_{day.isoformat()}_{slot}"
+            print(f"Sharded website discovery: slot={slot}/12 date={day}", flush=True)
+            os.environ["DISCOVERY_SHARD_INDEX"] = str(slot)
+            try:
+                summary = _run_country_discovery(_discovery_countries())
+                attempted = int(summary.get("queries_executed", 0))
+                failed = int(summary.get("failed_queries", 0))
+                if attempted == 0 or failed > 0:
+                    raise RuntimeError(
+                        f"Discovery slot {slot} incomplete: {failed}/{attempted} queries failed"
+                    )
+            except Exception as exc:
+                failures += 1
+                print(
+                    f"Discovery slot {slot} failed; checkpoint retained for retry: "
+                    f"{type(exc).__name__}: {exc}",
+                    flush=True,
+                )
+                continue
+
+            with SessionLocal() as db:
+                state = db.get(AutomationJobState, slot_name)
+                if state is None:
+                    db.add(
+                        AutomationJobState(job_name=slot_name, last_success_at=_utc_now())
+                    )
+                else:
+                    state.last_success_at = _utc_now()
+                from sqlalchemy import delete
+                cutoff = (current_date - timedelta(days=14)).isoformat()
+                db.execute(
+                    delete(AutomationJobState).where(
+                        AutomationJobState.job_name.like("website_discovery_slot_%"),
+                        AutomationJobState.job_name < f"website_discovery_slot_{cutoff}",
+                    )
+                )
+                db.commit()
+            print(f"Discovery slot {slot} completed", flush=True)
     finally:
         if original is None:
             os.environ.pop("DISCOVERY_SHARD_INDEX", None)
         else:
             os.environ["DISCOVERY_SHARD_INDEX"] = original
-    attempted = int(summary.get("queries_executed", 0))
-    failed = int(summary.get("failed_queries", 0))
-    if attempted == 0 or failed >= attempted:
-        raise RuntimeError("Website discovery slot failed; will retry next time")
-    with SessionLocal() as db:
-        state = db.get(AutomationJobState, slot_name)
-        if state is None:
-            state = AutomationJobState(
-                job_name=slot_name, last_success_at=_utc_now()
-            )
-            db.add(state)
-        else:
-            state.last_success_at = _utc_now()
-        # Prune old slot states so the table does not grow forever.
-        from sqlalchemy import delete
-        cutoff = (local.date() - timedelta(days=14)).isoformat()
-        db.execute(
-            delete(AutomationJobState).where(
-                AutomationJobState.job_name.like("website_discovery_slot_%"),
-                AutomationJobState.job_name < f"website_discovery_slot_{cutoff}",
-            )
-        )
-        db.commit()
-    print(f"Sharded website discovery slot {slot} completed", flush=True)
+    if failures:
+        raise RuntimeError(f"{failures} discovery slot(s) still require retry")
     return 0
 
 
