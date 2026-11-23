@@ -136,12 +136,35 @@ def analyze_opportunity(
         system_instruction=OPPORTUNITY_SYSTEM_INSTRUCTION,
     )
     supplied_content = " ".join(page_content[:MAX_OPPORTUNITY_CONTENT_CHARS].split())
-    if any(
-        " ".join(quote.split()) not in supplied_content
-        for quote in result.bidder_eligibility.evidence
-    ):
+    def _has_unsupported_eligibility_quote(candidate: OpportunityAnalysis) -> bool:
+        return any(
+            " ".join(quote.split()) not in supplied_content
+            for quote in candidate.bidder_eligibility.evidence
+        )
+
+    if _has_unsupported_eligibility_quote(result):
+        # Never persist fabricated applicant restrictions. If an explicitly
+        # enabled backup exists, retry once and re-verify the evidence against
+        # the actual page. No unverified quote reaches the matching pipeline.
+        from app.intelligence import openai_fallback
+
+        if openai_fallback.fallback_enabled():
+            try:
+                corrected = openai_fallback.generate_structured(
+                    prompt,
+                    OpportunityAnalysis,
+                    system_instruction=OPPORTUNITY_SYSTEM_INSTRUCTION,
+                )
+                if not _has_unsupported_eligibility_quote(corrected):
+                    return corrected
+            except openai_fallback.OpenAIFallbackError:
+                pass
+
         from app.intelligence.downstream_diagnostics import validation_details
 
         error = ValueError("Applicant eligibility quote is not supported by page content.")
-        raise GeminiResponseError(str(error), validation_details=validation_details(error, OpportunityAnalysis))
+        raise GeminiResponseError(
+            str(error),
+            validation_details=validation_details(error, OpportunityAnalysis),
+        )
     return result
