@@ -17,7 +17,7 @@ on:
 # Production verification trigger after AI routing, recovery, and schedule fixes.
 
 concurrency:
-  group: opportunity-radar-data-pipeline
+  group: opportunity-radar-${{ github.workflow }}
   cancel-in-progress: false
 
 jobs:
