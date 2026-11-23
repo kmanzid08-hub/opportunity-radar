@@ -273,6 +273,17 @@ def match_saved_opportunity(
     opportunity_id: int,
     profiles: list[CompanyProfileInput],
 ) -> tuple[int, int]:
+    # A duplicate URL can resolve to an existing canonical notice whose
+    # authoritative AI record is REVIEW/REJECTED. This is not a provider
+    # failure and retrying the entire publisher will never resolve it.
+    # Keep the original matching engine strict for other callers.
+    from app.intelligence.matching_engine import _load_verified_analysis
+    try:
+        _load_verified_analysis(opportunity_id)
+    except ValueError as exc:
+        print(f"Skipping unverified existing opportunity {opportunity_id}: {exc}")
+        return (0, 0)
+
     outcomes = match_verified_opportunity(
         opportunity_id,
         profiles=profiles,
