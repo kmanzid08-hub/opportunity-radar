@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
+
 from sqlalchemy import select
 
 from app import scanner
@@ -151,3 +153,27 @@ def test_unverified_duplicate_does_not_hold_entire_publisher_for_retry(monkeypat
         ),
     )
     assert scanner.match_saved_opportunity(42, []) == (0, 0)
+
+
+
+def test_strict_scan_reports_partial_ai_failure_after_summary(monkeypatch):
+    """Scheduled jobs must fail visibly while preserving successful writes."""
+    monkeypatch.setenv("SCAN_FAIL_ON_ERRORS", "true")
+    monkeypatch.setattr(scanner, "approve_existing_sources", lambda: 0)
+    monkeypatch.setattr(scanner, "mark_expired_opportunities", lambda: 0)
+    monkeypatch.setattr(scanner, "load_active_company_profiles", lambda _: [])
+
+    class TestSource:
+        source_name = "Test publisher"
+
+        def scan(self):
+            return [_raw(1)]
+
+    monkeypatch.setattr(scanner, "get_scanners", lambda: [TestSource()])
+
+    def broken_analysis(_raw, *, country_context=None):
+        raise RuntimeError("temporary provider outage")
+
+    monkeypatch.setattr(scanner, "process_opportunity_candidate", broken_analysis)
+    with pytest.raises(RuntimeError, match="classification=1"):
+        scanner.run_scanner()
