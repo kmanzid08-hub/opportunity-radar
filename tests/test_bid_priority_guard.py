@@ -125,7 +125,8 @@ def test_full_policy_caps_urgent_even_with_strong_match():
     assert result.urgency is Urgency.HIGH
     assert result.bid_readiness is BidReadiness.NEEDS_WORK
     assert result.eligibility_evidence is EvidenceStatus.UNKNOWN
-    assert result.recommended_next_action.startswith("Before committing bid resources:")
+    assert result.recommended_next_action.startswith("Confirm bidder eligibility")
+    assert "before committing bid resources" in result.recommended_next_action
     assert match().score == 85
     assert validate_triage(
         result, analysis=item, match=match(), minimum_score=70,
