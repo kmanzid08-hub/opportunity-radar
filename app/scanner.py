@@ -664,6 +664,24 @@ def run_scanner() -> None:
     )
     print("Finished.")
     print("=" * 60)
+    # A green scheduled job must not conceal lost notices or unsuccessful
+    # company matching. Keep direct/manual scanner calls backward compatible.
+    if os.getenv("SCAN_FAIL_ON_ERRORS", "").strip().lower() in {
+        "1", "true", "yes", "on"
+    } and any((
+        total_scan_failures,
+        total_classification_failures,
+        total_save_failures,
+        total_matching_failures,
+    )):
+        raise RuntimeError(
+            "Scan partially failed: "
+            f"crawler={total_scan_failures} "
+            f"classification={total_classification_failures} "
+            f"storage={total_save_failures} "
+            f"matching={total_matching_failures}; "
+            "review logs; successfully saved records are retained"
+        )
 
 
 def main() -> None:
