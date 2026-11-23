@@ -3,7 +3,7 @@ name: Daily tender scan
 on:
   schedule:
     # Run after daily source discovery; also support an explicit post-discovery scan.
-    - cron: "0 * * * *"
+    - cron: "7 * * * *"
       timezone: "Africa/Kigali"
   workflow_dispatch:
   # Tagged releases scan newly discovered sources using cached OCR and match both active companies.
