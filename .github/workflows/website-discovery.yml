@@ -12,7 +12,7 @@ on:
     paths:
       - .github/workflows/website-discovery.yml
 
-# Production verification trigger after AI routing, recovery, and schedule fixes.
+# Recovery verification: independent discovery queue and 12-slot catch-up.
 
 concurrency:
   group: opportunity-radar-${{ github.workflow }}
