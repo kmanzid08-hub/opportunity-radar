@@ -15,7 +15,7 @@ on:
       - .github/workflows/daily-tender-scan.yml
 
 concurrency:
-  group: opportunity-radar-data-pipeline
+  group: opportunity-radar-${{ github.workflow }}
   cancel-in-progress: false
 
 jobs:
