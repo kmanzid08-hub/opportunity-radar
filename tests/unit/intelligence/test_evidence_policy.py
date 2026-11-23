@@ -153,10 +153,7 @@ def test_unknown_policy_is_conservative_valid_and_nonmutating(readiness, require
     assert checked.eligibility_statement == UNKNOWN_APPLICANT
     assert CONFIRM_APPLICANT in checked.critical_gaps
     assert checked.recommended_next_action.startswith(CONFIRM_ACTION)
-    if requirements:
-        assert "mandatory experience" in checked.recommended_next_action
-    else:
-        assert "mandatory experience" not in checked.recommended_next_action
+    assert "mandatory experience" in checked.recommended_next_action
     # A verified technical fit is not proof of legal bidder eligibility.
     assert checked.priority.value == "MEDIUM"
     assert checked.priority_score == min(raw.priority_score, 69)
