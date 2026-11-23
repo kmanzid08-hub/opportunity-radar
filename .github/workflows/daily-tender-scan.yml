@@ -14,6 +14,8 @@ on:
     paths:
       - .github/workflows/daily-tender-scan.yml
 
+# Production verification trigger after AI routing, recovery, and schedule fixes.
+
 concurrency:
   group: opportunity-radar-data-pipeline
   cancel-in-progress: false
