@@ -287,7 +287,10 @@ def test_display_separates_stored_legacy_claims_without_ai_or_writes(
     client, monkeypatch, isolated_session_factory, conflict
 ):
     _configure(monkeypatch, isolated_session_factory)
-    a = _analysis(bidder_eligibility=restriction([DIRECT[3][0]]) if conflict else {})
+    a = _analysis(
+        bidder_eligibility=restriction([DIRECT[3][0]]) if conflict else {},
+        deadline="2099-10-30",
+    )
     oid, companies = _seed(isolated_session_factory, analysis=a)
     matcher = Mock(
         return_value=_match(
