@@ -83,7 +83,13 @@ def cap_unverified_bid_priority(
         "High capability fit does not establish eligibility to bid.",
         *checks,
     ]))
-    data["recommended_next_action"] = "Before committing bid resources: " + " ".join(checks)
+    # Preserve the more specific eligibility/experience instruction already
+    # produced by apply_triage_policy. The priority guard must supplement it,
+    # not overwrite an evidence-grounded next action.
+    instruction = (result.recommended_next_action or "").strip()
+    if not instruction:
+        instruction = CONFIRM_ACTION
+    data["recommended_next_action"] = instruction + " " + " ".join(checks)
     data["policy_adjustments"] = list(dict.fromkeys([
         *result.policy_adjustments,
         "unverified_mandatory_evidence_priority_cap",
