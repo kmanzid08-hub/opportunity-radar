@@ -118,6 +118,7 @@ class RequestBudget:
         self._last_minute: deque[tuple[float, int]] = deque()
         self._last_day: deque[tuple[float, int]] = deque()
         self._disabled_until = 0.0
+        self._timeout_streak = 0
 
     def reserve(self, estimated_tokens: int) -> bool:
         with self._lock:
@@ -145,6 +146,19 @@ class RequestBudget:
     def pause(self, seconds: float) -> None:
         with self._lock:
             self._disabled_until = max(self._disabled_until, self.clock() + seconds)
+
+    def record_timeout(self) -> bool:
+        """Open a temporary circuit after repeated network timeouts."""
+        with self._lock:
+            self._timeout_streak += 1
+            if self._timeout_streak >= 2:
+                self._disabled_until = max(self._disabled_until, self.clock() + 900)
+                return True
+            return False
+
+    def record_success(self) -> None:
+        with self._lock:
+            self._timeout_streak = 0
 
 
 _budgets: dict[str, RequestBudget] = {}
@@ -341,7 +355,7 @@ def _attempt(
         client = OpenAI(
             api_key=config.api_key,
             base_url=config.base_url,
-            timeout=75.0,
+            timeout=float(_setting(os.environ, f"{config.name.upper()}_TIMEOUT_SECONDS", 22 if config.name == "nvidia" else 45)),
             max_retries=0,
         )
         args: dict[str, Any] = {
@@ -391,6 +405,7 @@ def _attempt(
             getattr(usage, "completion_tokens", "unknown"),
             getattr(usage, "total_tokens", "unknown"),
         )
+        budget.record_success()
         return result
     except FreeAPIError:
         raise
@@ -409,6 +424,9 @@ def _attempt(
             _record_permanent_model_failure(config, 86_400)
         elif status in {502, 503, 504}:
             budget.pause(300)
+        elif "Timeout" in kind or isinstance(exc, TimeoutError):
+            if budget.record_timeout():
+                _record_permanent_model_failure(config, 900)
         logger.warning(
             "Community API unavailable provider=%s error_type=%s status=%s",
             config.name, kind, status if isinstance(status, int) else "unknown",
